@@ -11,6 +11,7 @@ function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -37,7 +38,6 @@ function App() {
             setIsInitialized(true);
         } catch (e: any) {
             console.error("Init failed", e);
-            // Show error on screen instead of just alerting
             setInitError(e?.message || JSON.stringify(e) || "Google APIの初期化に失敗しました。");
         }
     };
@@ -49,23 +49,29 @@ function App() {
     if (isSignedIn) {
       const loadData = async () => {
         setLoading(true);
+        setAuthError(null);
         try {
           // Ensure sheets exist
           await sheetService.initializeSheets();
 
-          const [userData, userList, catList, taskList] = await Promise.all([
-            sheetService.getCurrentUser(),
+          const userData = await sheetService.getCurrentUser();
+          if (!userData) {
+             setAuthError("あなたのアカウントは「Googleアカウント管理」シートに登録されていません。管理者に連絡してください。");
+             return;
+          }
+          setCurrentUser(userData);
+
+          const [userList, catList, taskList] = await Promise.all([
             sheetService.getUsers(),
             sheetService.getCategories(),
             sheetService.getTasks(),
           ]);
-          setCurrentUser(userData);
           setUsers(userList);
           setCategories(catList);
           setTasks(taskList);
-        } catch (error) {
+        } catch (error: any) {
           console.error("Failed to load data", error);
-          alert("データの読み込みに失敗しました。スプレッドシートIDや権限を確認してください。");
+          setAuthError("データの読み込みに失敗しました: " + (error?.result?.error?.message || error.message));
         } finally {
           setLoading(false);
         }
@@ -147,27 +153,44 @@ function App() {
     }
   };
 
-  // Error State
+  // Init Error State
   if (initError) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
         <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full border-l-4 border-red-500">
-            <h1 className="text-xl font-bold text-red-600 mb-2">システムエラー</h1>
-            <p className="text-gray-700 mb-4">アプリケーションの初期化に失敗しました。</p>
+            <h1 className="text-xl font-bold text-red-600 mb-2">初期化エラー</h1>
             <div className="bg-gray-100 p-3 rounded text-left text-xs font-mono text-gray-600 overflow-auto max-h-32 mb-4">
               {initError}
             </div>
-            <p className="text-sm text-gray-500">APIキーが無効化されているか、ネットワーク設定に問題がある可能性があります。</p>
+            <p className="text-sm text-gray-500">ページを再読み込みしてください。</p>
         </div>
       </div>
     );
+  }
+
+  // Authentication Error State (User not found in sheet)
+  if (authError) {
+     return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full border-l-4 border-orange-500">
+            <h1 className="text-xl font-bold text-orange-600 mb-2">アクセス許可エラー</h1>
+            <p className="text-gray-700 mb-6">{authError}</p>
+            <button 
+                onClick={() => window.location.reload()}
+                className="text-indigo-600 hover:text-indigo-800 underline"
+            >
+                再読み込み
+            </button>
+        </div>
+      </div>
+     );
   }
 
   if (!isInitialized) {
      return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <p className="text-gray-500 font-medium">システムを初期化中...</p>
+        <p className="text-gray-500 font-medium">システムを起動中...</p>
       </div>
      );
   }
@@ -190,6 +213,7 @@ function App() {
       );
   }
 
+  // Main App
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
@@ -230,7 +254,7 @@ function App() {
                 <div className="flex items-center gap-2 pl-4 border-l border-gray-200">
                   <div className="text-right hidden sm:block">
                     <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
-                    <p className="text-xs text-gray-500">{currentUser.role}</p>
+                    <p className="text-xs text-gray-500">{currentUser.role === 'admin' ? '管理者' : '一般'}</p>
                   </div>
                   {currentUser.avatarUrl ? (
                       <img src={currentUser.avatarUrl} alt="profile" className="h-8 w-8 rounded-full bg-gray-200" />

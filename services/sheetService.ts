@@ -58,7 +58,6 @@ class SheetService {
       if (document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
          if (window.gapi) loadGapi();
          else {
-             // Wait for it to load if the tag exists but window object doesn't
              const existingScript = document.querySelector('script[src="https://apis.google.com/js/api.js"]') as HTMLScriptElement;
              existingScript.addEventListener('load', loadGapi);
          }
@@ -91,7 +90,6 @@ class SheetService {
   // Prompt user to sign in
   signIn(): void {
     if (this.tokenClient) {
-      // requestAccessToken({ prompt: '' }) skips the consent screen if already granted
       this.tokenClient.requestAccessToken({ prompt: '' });
     }
   }
@@ -99,7 +97,6 @@ class SheetService {
   // Get authenticated user's email
   private async fetchUserInfo() {
     try {
-      // Using the simple oauth2 v2 API to get user info
       const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: {
           Authorization: `Bearer ${window.gapi.client.getToken().access_token}`,
@@ -127,9 +124,11 @@ class SheetService {
       const requests = [];
 
       // Define headers for each sheet
+      // Note: 'Googleアカウント管理' structure is based on the provided GAS code:
+      // Col 0: ID, 1: Email, 2: Role, 3: Year, 4: Class, 5: No, 6: Name
       const headers: Record<string, string[]> = {
         [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt'],
-        [SHEET_NAMES.USERS]: ['Email', 'Name', 'Role', 'AvatarUrl'],
+        [SHEET_NAMES.USERS]: ['StudentID', 'Email', 'Role', 'Year', 'Class', 'No', 'Name'],
         [SHEET_NAMES.CATEGORIES]: ['ID', 'Name']
       };
 
@@ -163,13 +162,14 @@ class SheetService {
             resource: { values: [headerRow] }
           });
           
-          // If Users sheet, add current user as admin automatically
+          // If Users sheet (Googleアカウント管理), add current user as admin automatically
+          // Use columns: ID, Email, Role, Year, Class, No, Name
           if (name === SHEET_NAMES.USERS && this.currentUserEmail) {
              await window.gapi.client.sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID,
                 range: `${SHEET_NAMES.USERS}!A2`,
                 valueInputOption: 'USER_ENTERED',
-                resource: { values: [[this.currentUserEmail, 'Admin User', 'admin', '']] }
+                resource: { values: [['0001', this.currentUserEmail, '管理者', '', '', '', 'Admin User']] }
              });
           }
            // If Categories sheet, add default categories
@@ -194,26 +194,45 @@ class SheetService {
 
   // --- Data Access Methods ---
 
-  async getCurrentUser(): Promise<User> {
+  async getCurrentUser(): Promise<User | null> {
     if (!this.currentUserEmail) await this.fetchUserInfo();
+    if (!this.currentUserEmail) return null;
+
     const users = await this.getUsers();
-    const user = users.find(u => u.email === this.currentUserEmail);
-    // If user doesn't exist in DB, return temporary object (in real app, might auto-register)
-    return user || { email: this.currentUserEmail, name: 'Guest', role: 'user' };
+    // Case-insensitive email check
+    const user = users.find(u => u.email.toLowerCase() === this.currentUserEmail.toLowerCase());
+    
+    // If user not found in 'Googleアカウント管理', return null to block access or Guest
+    // Per the GAS code, if not found -> Access Denied. 
+    // For this demo, we'll return null which App.tsx should handle as "Not Authorized".
+    if (!user) {
+      console.warn("User not found in Googleアカウント管理");
+      return null;
+    }
+    return user;
   }
 
   async getUsers(): Promise<User[]> {
+    // Fetch from 'Googleアカウント管理'
+    // Structure: 0:ID, 1:Email, 2:Role, 3:Year, 4:Class, 5:No, 6:Name
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.USERS}!A2:D`,
+      range: `${SHEET_NAMES.USERS}!A2:G`,
     });
     const rows = res.result.values || [];
-    return rows.map((row: string[]) => ({
-      email: row[0],
-      name: row[1],
-      role: row[2] as 'admin' | 'user',
-      avatarUrl: row[3] || undefined
-    }));
+    
+    return rows.map((row: string[]) => {
+      const roleStr = row[2]; // '管理者', '生徒', etc.
+      // Map GAS roles to App roles
+      const role: 'admin' | 'user' = (roleStr === '管理者') ? 'admin' : 'user';
+      
+      return {
+        email: row[1] || '',
+        name: row[6] || row[1] || 'Unknown', // Use Name (Col G) or fallback to Email
+        role: role,
+        avatarUrl: undefined
+      };
+    }).filter((u: User) => u.email !== ''); // Filter out empty rows
   }
 
   async getCategories(): Promise<Category[]> {
@@ -321,7 +340,6 @@ class SheetService {
   }
 
   async updateTaskStatus(taskId: string, newStatus: Status): Promise<Task> {
-     // Optimization: We could just update the specific cell, but reusing updateTask is safer for now
      const tasks = await this.getTasks();
      const task = tasks.find(t => t.id === taskId);
      if (!task) throw new Error("Task not found");
@@ -331,16 +349,11 @@ class SheetService {
   }
 
   async deleteTask(taskId: string): Promise<void> {
-     // In Sheets, deleting a row shifts everything up, changing indices.
-     // For this MVP, we will just clear the row content or use a batchUpdate to delete dimension.
-     // Using deleteDimension is cleaner.
-     
      const allTasks = await this.getTasks();
      const index = allTasks.findIndex(t => t.id === taskId);
      
      if (index === -1) throw new Error("Task not found");
      
-     // Sheet ID is needed for batchUpdate deleteDimension. We need to fetch sheetId of 'TASKS'
      const spreadsheet = await window.gapi.client.sheets.spreadsheets.get({
         spreadsheetId: SPREADSHEET_ID,
       });
@@ -355,7 +368,7 @@ class SheetService {
                     range: {
                         sheetId: sheetId,
                         dimension: 'ROWS',
-                        startIndex: index + 1, // 0-based index including header? No, startIndex is 0-based. Row 1 is index 0. Header is index 0. Task 1 is index 1.
+                        startIndex: index + 1, 
                         endIndex: index + 2
                     }
                 }

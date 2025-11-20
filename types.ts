@@ -50,6 +50,6 @@ export const SPREADSHEET_ID = '15rr38dSKNiyquXM0CXalAAs8dXCQLJ7OMe9dDPOk8t0';
 // シート名の定義
 export const SHEET_NAMES = {
   TASKS: 'タスク',
-  USERS: 'ユーザーマスタ',
+  USERS: 'Googleアカウント管理', // GASコードに合わせて変更
   CATEGORIES: 'カテゴリマスタ',
 };
