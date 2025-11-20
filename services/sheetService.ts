@@ -1,4 +1,3 @@
-
 import { Task, User, Category, Status, Priority, SPREADSHEET_ID, SHEET_NAMES } from '../types';
 import { GOOGLE_API_KEY, GOOGLE_CLIENT_ID, SCOPES, DISCOVERY_DOCS } from '../config';
 
@@ -19,47 +18,73 @@ class SheetService {
   // Initialize the Google API Client
   async initClient(onSignInUpdate: (isSignedIn: boolean) => void): Promise<void> {
     return new Promise((resolve, reject) => {
-      const script1 = document.createElement('script');
-      script1.src = 'https://apis.google.com/js/api.js';
-      script1.async = true;
-      script1.defer = true;
-      script1.onload = () => {
-        window.gapi.load('client', async () => {
-          try {
-            await window.gapi.client.init({
-              apiKey: GOOGLE_API_KEY,
-              discoveryDocs: DISCOVERY_DOCS,
-            });
-            this.gapiInited = true;
-            if (this.gisInited) resolve();
-          } catch (err) {
-            reject(err);
-          }
-        });
-      };
-      document.body.appendChild(script1);
-
-      const script2 = document.createElement('script');
-      script2.src = 'https://accounts.google.com/gsi/client';
-      script2.async = true;
-      script2.defer = true;
-      script2.onload = () => {
-        this.tokenClient = window.google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: SCOPES,
-          callback: async (resp: any) => {
-            if (resp.error !== undefined) {
-              throw resp;
+      const loadGapi = () => {
+        if (window.gapi) {
+          window.gapi.load('client', async () => {
+            try {
+              await window.gapi.client.init({
+                apiKey: GOOGLE_API_KEY,
+                discoveryDocs: DISCOVERY_DOCS,
+              });
+              this.gapiInited = true;
+              if (this.gisInited) resolve();
+            } catch (err) {
+              reject(err);
             }
-            // Token acquired, now we can check user info
-            await this.fetchUserInfo();
-            onSignInUpdate(true);
-          },
-        });
-        this.gisInited = true;
-        if (this.gapiInited) resolve();
+          });
+        }
       };
-      document.body.appendChild(script2);
+
+      const loadGis = () => {
+        if (window.google) {
+          this.tokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: SCOPES,
+            callback: async (resp: any) => {
+              if (resp.error !== undefined) {
+                throw resp;
+              }
+              // Token acquired, now we can check user info
+              await this.fetchUserInfo();
+              onSignInUpdate(true);
+            },
+          });
+          this.gisInited = true;
+          if (this.gapiInited) resolve();
+        }
+      };
+
+      // Check if scripts are already loaded (e.g. from previous render)
+      if (document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
+         if (window.gapi) loadGapi();
+         else {
+             // Wait for it to load if the tag exists but window object doesn't
+             const existingScript = document.querySelector('script[src="https://apis.google.com/js/api.js"]') as HTMLScriptElement;
+             existingScript.addEventListener('load', loadGapi);
+         }
+      } else {
+        const script1 = document.createElement('script');
+        script1.src = 'https://apis.google.com/js/api.js';
+        script1.async = true;
+        script1.defer = true;
+        script1.onload = loadGapi;
+        document.body.appendChild(script1);
+      }
+
+      if (document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+        if (window.google) loadGis();
+         else {
+             const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]') as HTMLScriptElement;
+             existingScript.addEventListener('load', loadGis);
+         }
+      } else {
+        const script2 = document.createElement('script');
+        script2.src = 'https://accounts.google.com/gsi/client';
+        script2.async = true;
+        script2.defer = true;
+        script2.onload = loadGis;
+        document.body.appendChild(script2);
+      }
     });
   }
 
