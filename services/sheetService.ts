@@ -14,6 +14,7 @@ class SheetService {
   private gapiInited = false;
   private gisInited = false;
   private currentUserEmail: string = '';
+  private currentUserName: string = '';
 
   // Initialize the Google API Client
   async initClient(onSignInUpdate: (isSignedIn: boolean) => void): Promise<void> {
@@ -94,7 +95,7 @@ class SheetService {
     }
   }
 
-  // Get authenticated user's email
+  // Get authenticated user's email and name
   private async fetchUserInfo() {
     try {
       const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -104,6 +105,7 @@ class SheetService {
       });
       const data = await response.json();
       this.currentUserEmail = data.email;
+      this.currentUserName = data.name;
       return data;
     } catch (e) {
       console.error("Failed to fetch user info", e);
@@ -169,7 +171,7 @@ class SheetService {
                 spreadsheetId: SPREADSHEET_ID,
                 range: `${SHEET_NAMES.USERS}!A2`,
                 valueInputOption: 'USER_ENTERED',
-                resource: { values: [['0001', this.currentUserEmail, '管理者', '', '', '', 'Admin User']] }
+                resource: { values: [['0001', this.currentUserEmail, '管理者', '', '', '', this.currentUserName || 'Admin User']] }
              });
           }
            // If Categories sheet, add default categories
@@ -200,14 +202,38 @@ class SheetService {
 
     const users = await this.getUsers();
     // Case-insensitive email check
-    const user = users.find(u => u.email.toLowerCase() === this.currentUserEmail.toLowerCase());
+    let user = users.find(u => u.email.toLowerCase() === this.currentUserEmail.toLowerCase());
     
-    // If user not found in 'Googleアカウント管理', return null to block access or Guest
-    // Per the GAS code, if not found -> Access Denied. 
-    // For this demo, we'll return null which App.tsx should handle as "Not Authorized".
+    // If user not found, AUTO-REGISTER them
     if (!user) {
-      console.warn("User not found in Googleアカウント管理");
-      return null;
+      console.log("User not found, auto-registering...");
+      try {
+        // Default values for new user
+        const newName = this.currentUserName || this.currentUserEmail;
+        const newRole = '生徒'; // Default role (maps to 'user' in frontend)
+        
+        // Structure: 0:ID, 1:Email, 2:Role, 3:Year, 4:Class, 5:No, 6:Name
+        // We'll use 'auto' for ID or leave it blank if GAS generates it, but here we just put a placeholder
+        const newRow = ['auto', this.currentUserEmail, newRole, '', '', '', newName];
+
+        await window.gapi.client.sheets.spreadsheets.values.append({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${SHEET_NAMES.USERS}!A2`,
+          valueInputOption: 'USER_ENTERED',
+          resource: { values: [newRow] }
+        });
+
+        // Return the newly created user object
+        user = {
+          email: this.currentUserEmail,
+          name: newName,
+          role: 'user',
+          avatarUrl: undefined
+        };
+      } catch (e) {
+        console.error("Failed to auto-register user", e);
+        return null;
+      }
     }
     return user;
   }
