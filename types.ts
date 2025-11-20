@@ -1,3 +1,4 @@
+
 export enum Status {
   NOT_STARTED = '未着手',
   IN_PROGRESS = '進行中',
@@ -42,4 +43,13 @@ export interface Category {
   name: string;
 }
 
-export const SPREADSHEET_ID = '1IF4upVHvvfPWwC2FfTGIbTZGoxd_IZDQmR3DXlY76zY';
+// ブラウザのURLからコピーしたスプレッドシートIDをここに設定してください
+// https://docs.google.com/spreadsheets/d/[この部分]/edit
+export const SPREADSHEET_ID = '15rr38dSKNiyquXM0CXalAAs8dXCQLJ7OMe9dDPOk8t0';
+
+// シート名の定義
+export const SHEET_NAMES = {
+  TASKS: 'タスク',
+  USERS: 'ユーザーマスタ',
+  CATEGORIES: 'カテゴリマスタ',
+};

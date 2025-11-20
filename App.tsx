@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { TaskTable } from './components/TaskTable';
 import { KanbanBoard } from './components/KanbanBoard';
@@ -7,10 +8,13 @@ import { sheetService } from './services/sheetService';
 import { Task, User, Category, ViewMode, Status, Priority } from './types';
 
 function App() {
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.LIST);
@@ -22,29 +26,55 @@ function App() {
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
+  // Initialize Google API Client on Mount
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const [userData, userList, catList, taskList] = await Promise.all([
-          sheetService.getCurrentUser(),
-          sheetService.getUsers(),
-          sheetService.getCategories(),
-          sheetService.getTasks(),
-        ]);
-        setCurrentUser(userData);
-        setUsers(userList);
-        setCategories(catList);
-        setTasks(taskList);
-      } catch (error) {
-        console.error("Failed to load data", error);
-        alert("データの読み込みに失敗しました。");
-      } finally {
-        setLoading(false);
-      }
+    const init = async () => {
+        try {
+            await sheetService.initClient((signedIn) => {
+                setIsSignedIn(signedIn);
+            });
+            setIsInitialized(true);
+        } catch (e) {
+            console.error("Init failed", e);
+            alert("Google APIの初期化に失敗しました。設定を確認してください。");
+        }
     };
-    loadData();
+    init();
   }, []);
+
+  // Load Data when Signed In
+  useEffect(() => {
+    if (isSignedIn) {
+      const loadData = async () => {
+        setLoading(true);
+        try {
+          // Ensure sheets exist
+          await sheetService.initializeSheets();
+
+          const [userData, userList, catList, taskList] = await Promise.all([
+            sheetService.getCurrentUser(),
+            sheetService.getUsers(),
+            sheetService.getCategories(),
+            sheetService.getTasks(),
+          ]);
+          setCurrentUser(userData);
+          setUsers(userList);
+          setCategories(catList);
+          setTasks(taskList);
+        } catch (error) {
+          console.error("Failed to load data", error);
+          alert("データの読み込みに失敗しました。スプレッドシートIDや権限を確認してください。");
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadData();
+    }
+  }, [isSignedIn]);
+
+  const handleSignIn = () => {
+      sheetService.signIn();
+  };
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
@@ -67,6 +97,7 @@ function App() {
   };
 
   const handleSaveTask = async (taskData: Partial<Task>) => {
+    setLoading(true);
     try {
       if (editingTask) {
         // Update
@@ -81,16 +112,21 @@ function App() {
     } catch (error) {
       console.error("Save failed", error);
       alert("保存に失敗しました。");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleDeleteTask = async (taskId: string) => {
     if (window.confirm("本当にこのタスクを削除しますか？")) {
+      setLoading(true);
       try {
         await sheetService.deleteTask(taskId);
         setTasks(prev => prev.filter(t => t.id !== taskId));
       } catch (error) {
         alert("削除に失敗しました。");
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -109,13 +145,30 @@ function App() {
     }
   };
 
-  if (loading) {
-    return (
+  if (!isInitialized) {
+     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <p className="text-gray-500 font-medium">KiryoTaskManagerを読み込み中...</p>
+        <p className="text-gray-500 font-medium">システムを初期化中...</p>
       </div>
-    );
+     );
+  }
+
+  if (!isSignedIn) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+            <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">KiryoTaskManager</h1>
+                <p className="text-gray-600 mb-8">チームのタスクをGoogleスプレッドシートで管理します。</p>
+                <button 
+                    onClick={handleSignIn}
+                    className="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
+                >
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6 mr-3" alt="Google" />
+                    Googleアカウントでログイン
+                </button>
+            </div>
+        </div>
+      );
   }
 
   return (
@@ -148,7 +201,8 @@ function App() {
             <div className="flex items-center gap-4">
               <button
                 onClick={handleCreateTask}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center"
+                disabled={loading}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center disabled:opacity-50"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 新規タスク
@@ -159,15 +213,26 @@ function App() {
                     <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
                     <p className="text-xs text-gray-500">{currentUser.role}</p>
                   </div>
-                  <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-                    {currentUser.name.charAt(0)}
-                  </div>
+                  {currentUser.avatarUrl ? (
+                      <img src={currentUser.avatarUrl} alt="profile" className="h-8 w-8 rounded-full bg-gray-200" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                        {currentUser.name.charAt(0)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
       </header>
+      
+       {/* Loading Indicator Overlay */}
+       {loading && (
+          <div className="fixed inset-0 bg-white bg-opacity-50 z-50 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          </div>
+       )}
 
       {/* Filters & Toolbar */}
       <div className="bg-white border-b border-gray-200 py-4">
