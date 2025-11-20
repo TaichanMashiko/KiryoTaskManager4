@@ -1,0 +1,5 @@
+{
+  "name": "KiryoTaskManager",
+  "description": "A modern task management application using Google Sheets as a database, featuring List, Kanban, and Gantt views.",
+  "requestFramePermissions": []
+}
