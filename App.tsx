@@ -10,6 +10,7 @@ import { Task, User, Category, ViewMode, Status, Priority } from './types';
 function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -34,9 +35,10 @@ function App() {
                 setIsSignedIn(signedIn);
             });
             setIsInitialized(true);
-        } catch (e) {
+        } catch (e: any) {
             console.error("Init failed", e);
-            alert("Google APIの初期化に失敗しました。設定を確認してください。");
+            // Show error on screen instead of just alerting
+            setInitError(e?.message || JSON.stringify(e) || "Google APIの初期化に失敗しました。");
         }
     };
     init();
@@ -145,9 +147,26 @@ function App() {
     }
   };
 
+  // Error State
+  if (initError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full border-l-4 border-red-500">
+            <h1 className="text-xl font-bold text-red-600 mb-2">システムエラー</h1>
+            <p className="text-gray-700 mb-4">アプリケーションの初期化に失敗しました。</p>
+            <div className="bg-gray-100 p-3 rounded text-left text-xs font-mono text-gray-600 overflow-auto max-h-32 mb-4">
+              {initError}
+            </div>
+            <p className="text-sm text-gray-500">APIキーが無効化されているか、ネットワーク設定に問題がある可能性があります。</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isInitialized) {
      return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
         <p className="text-gray-500 font-medium">システムを初期化中...</p>
       </div>
      );
