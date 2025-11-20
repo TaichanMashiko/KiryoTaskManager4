@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Task, User, Status } from '../types';
 
@@ -13,10 +14,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) 
   const rowHeight = 48;
 
   // Calculate timeline range based on tasks
-  const { dates, startDate, totalWidth } = useMemo(() => {
+  const { dates, startDate } = useMemo(() => {
     if (tasks.length === 0) {
       const now = new Date();
-      return { dates: [now], startDate: now, totalWidth: colWidth };
+      return { dates: [now], startDate: now };
     }
 
     // Find min start and max due dates
@@ -53,8 +54,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) 
 
     return {
       dates: dateArray,
-      startDate: min,
-      totalWidth: dateArray.length * colWidth
+      startDate: min
     };
   }, [tasks]);
 
@@ -157,7 +157,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) 
                       className={`absolute top-2 h-8 rounded-md shadow-sm cursor-pointer flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden transition-all ${getStatusColor(task.status)}`}
                       style={{ 
                         left: `${left}px`, 
-                        width: `${width}px`,
+                        width: `${width}px`, 
                         maxWidth: '100%'
                       }}
                       title={`${task.title} (${task.startDate} ~ ${task.dueDate})`}

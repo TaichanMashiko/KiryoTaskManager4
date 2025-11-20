@@ -1,11 +1,11 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TaskTable } from './components/TaskTable';
 import { KanbanBoard } from './components/KanbanBoard';
 import { GanttChart } from './components/GanttChart';
 import { TaskModal } from './components/TaskModal';
 import { sheetService } from './services/sheetService';
-import { Task, User, Category, ViewMode, Status, Priority } from './types';
+import { Task, User, Category, ViewMode, Status } from './types';
 
 function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
