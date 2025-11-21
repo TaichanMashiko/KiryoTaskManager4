@@ -12,7 +12,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ tasks, users }) => {
     const todayStr = new Date().toISOString().split('T')[0];
 
     return users.map(user => {
-      const userTasks = tasks.filter(t => t.assigneeEmail === user.email);
+      // 自分のタスク かつ public のものだけを集計対象にする
+      // (個人のTODOはチームの負荷状況には関係しないため除外)
+      const userTasks = tasks.filter(t => t.assigneeEmail === user.email && t.visibility !== 'private');
       
       // 今日のタスク（未完了 かつ 期限が今日）
       const tasksDueToday = userTasks.filter(t => 
@@ -45,7 +47,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ tasks, users }) => {
         <h2 className="text-xl font-bold text-gray-800 mb-4">チーム負荷状況ダッシュボード</h2>
         <p className="text-sm text-gray-500 mb-6">
             各メンバーの現在のタスク保有数、本日の締切数、および過去の消化実績を表示しています。<br/>
-            タスクの偏りを確認し、助け合いの目安にしてください。
+            タスクの偏りを確認し、助け合いの目安にしてください。<br/>
+            <span className="text-gray-400 text-xs">※個人のTODO（非公開タスク）は集計に含まれません。</span>
         </p>
 
         <div className="overflow-x-auto">

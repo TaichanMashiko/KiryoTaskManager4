@@ -25,6 +25,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
   // タグドロップダウン用の状態
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{top: number, left: number, width: number} | null>(null);
 
   // タグドロップダウン外のクリック検知
   useEffect(() => {
@@ -36,6 +37,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // スクロール時にドロップダウンを閉じる（位置ずれ防止）
+  useEffect(() => {
+    const handleScroll = () => {
+        if (isTagDropdownOpen) setIsTagDropdownOpen(false);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [isTagDropdownOpen]);
+
+  // ドロップダウンの位置計算
+  useEffect(() => {
+    if (isTagDropdownOpen && tagDropdownRef.current) {
+        const rect = tagDropdownRef.current.getBoundingClientRect();
+        setDropdownPos({
+            top: rect.bottom,
+            left: rect.left,
+            width: rect.width
+        });
+    }
+  }, [isTagDropdownOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -167,15 +189,22 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                         className="absolute inset-y-0 right-0 flex items-center px-2 cursor-pointer text-gray-400 hover:text-gray-600"
                         onClick={() => {
                             setIsTagDropdownOpen(!isTagDropdownOpen);
-                            // Toggle click should focus input but logic handled by isOpen
                         }}
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                     </div>
                 </div>
 
-                {isTagDropdownOpen && (
-                    <ul className="absolute z-20 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 ring-1 ring-black ring-opacity-5 overflow-auto text-sm">
+                {/* Dropdown List - Portal-like fixed positioning to escape overflow clipping */}
+                {isTagDropdownOpen && dropdownPos && (
+                    <ul 
+                        className="fixed z-[9999] bg-white shadow-lg max-h-60 rounded-md py-1 ring-1 ring-black ring-opacity-5 overflow-auto text-sm"
+                        style={{
+                            top: `${dropdownPos.top}px`,
+                            left: `${dropdownPos.left}px`,
+                            width: `${dropdownPos.width}px`,
+                        }}
+                    >
                         {/* もし入力があり、かつ一致するものがなければ新規作成オプションを表示 */}
                         {currentTagInput && !tags.some(t => t.name === currentTagInput) && (
                              <li 

@@ -336,7 +336,8 @@ export class SheetService {
     const id = 'tag_' + Math.random().toString(36).substr(2, 9);
     
     // Determine color: try to find one that is not used yet
-    const usedColors = new Set(existingTags.map(t => t.color.toUpperCase()));
+    // Ensure we compare uppercase to uppercase and handle potential undefined colors
+    const usedColors = new Set(existingTags.map(t => (t.color || '').toUpperCase()));
     const availableColors = PRESET_COLORS.filter(c => !usedColors.has(c.toUpperCase()));
 
     let color;
@@ -344,8 +345,10 @@ export class SheetService {
         // Pick a random unused color
         color = availableColors[Math.floor(Math.random() * availableColors.length)];
     } else {
-        // If all presets are used, pick any random preset
-        color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+        // If all presets are used, generate a random pleasant hex color
+        // This avoids reuse of existing colors when presets are exhausted
+        const randomHex = Math.floor(Math.random()*16777215).toString(16);
+        color = '#' + randomHex.padStart(6, '0');
     }
 
     const newTag: Tag = {
