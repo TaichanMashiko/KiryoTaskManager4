@@ -50,7 +50,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
           title: '',
           detail: '',
           assigneeEmail: mode === 'todo' && currentUser ? currentUser.email : (users[0]?.email || ''),
-          tag: tags[0]?.name || '',
+          tag: '', // デフォルトは空欄
           priority: Priority.MEDIUM,
           status: Status.NOT_STARTED,
           startDate: new Date().toISOString().split('T')[0],
@@ -80,14 +80,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
   let displayTags = tags;
   
   if (currentTagInput) {
+      // 部分一致でフィルタリング
       const matches = tags.filter(t => t.name.toLowerCase().includes(currentTagInput.toLowerCase()));
-      // 入力値が既存タグと完全に一致する場合（選択済みの場合など）は、他の選択肢も見せるために全件表示にするか、
-      // あるいはフィルタした結果（その1件）だけを見せるか。
-      // ユーザー要望の「既存タグが表示されない」を解決するため、
-      // 完全一致が1件だけある場合は「切り替えたい」意図を汲んで全件表示（またはフィルタ解除）するのが親切だが、
-      // 一般的なComboboxの挙動としてはフィルタが正しい。
-      // ここでは「▼ボタン」で全件表示できるので、入力中はフィルタリングを優先する。
-      // ただし、一致するものがなければ「新規作成」を表示する。
       displayTags = matches;
   }
 
