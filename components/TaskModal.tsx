@@ -44,7 +44,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
         });
       }
     }
-  }, [isOpen, task, users, tags, currentUser, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, task, mode]); // users, tags, currentUserの変更によるリセットを防ぐため、依存配列から除外
 
   if (!isOpen) return null;
 

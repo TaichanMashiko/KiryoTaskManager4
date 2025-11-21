@@ -171,6 +171,10 @@ function App() {
         return;
     }
 
+    // UI改善: 保存ボタンを押したら即座にモーダルを閉じる
+    setIsModalOpen(false);
+    setEditingTask(null);
+
     try {
       setLoading(true);
       let savedTask: Task;
@@ -193,7 +197,8 @@ function App() {
                   await sheetService.updateTask(savedTask);
               }
               
-              alert("Googleカレンダーに予定を追加しました。");
+              // Note: Alerting here might be annoying if modal already closed, but useful for confirmation
+              // alert("Googleカレンダーに予定を追加しました。"); 
           } catch (calendarError: any) {
               console.error("Calendar Error", calendarError);
               alert("タスクは保存されましたが、カレンダーへの追加に失敗しました。\n" + calendarError.message);
@@ -201,8 +206,6 @@ function App() {
       }
 
       await loadData(true);
-      setIsModalOpen(false);
-      setEditingTask(null);
     } catch (e: any) {
       console.error(e);
       alert("保存に失敗しました: " + e.message);
