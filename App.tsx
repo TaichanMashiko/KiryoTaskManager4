@@ -27,6 +27,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
 
   // Initialize Google API Client on Mount
   useEffect(() => {
@@ -84,15 +85,28 @@ function App() {
       sheetService.signIn();
   };
 
+  // Extract unique departments from users
+  const departments = useMemo(() => {
+    const depts = new Set(users.map(u => u.department).filter(d => d)); // Filter out empty/undefined
+    return Array.from(depts);
+  }, [users]);
+
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             task.detail.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesAssignee = filterAssignee ? task.assigneeEmail === filterAssignee : true;
       const matchesStatus = filterStatus ? task.status === filterStatus : true;
-      return matchesSearch && matchesAssignee && matchesStatus;
+      
+      // Department Filter Logic: Find assignee and check their department
+      const assignee = users.find(u => u.email === task.assigneeEmail);
+      const matchesDepartment = filterDepartment 
+        ? (assignee?.department === filterDepartment) 
+        : true;
+
+      return matchesSearch && matchesAssignee && matchesStatus && matchesDepartment;
     });
-  }, [tasks, searchQuery, filterAssignee, filterStatus]);
+  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, users]);
 
   const handleCreateTask = () => {
     setEditingTask(null);
@@ -296,6 +310,20 @@ function App() {
           </div>
           
           <div className="flex gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+            {/* Department Filter */}
+            {departments.length > 0 && (
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
+              >
+                <option value="">すべての部署</option>
+                {departments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            )}
+
             <select
               value={filterAssignee}
               onChange={(e) => setFilterAssignee(e.target.value)}
