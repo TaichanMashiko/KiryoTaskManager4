@@ -182,7 +182,7 @@ export class SheetService {
 
       // Define headers for each sheet
       const headers: Record<string, string[]> = {
-        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt'],
+        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility'],
         [SHEET_NAMES.USERS]: ['ID', 'Email', 'Role', 'Department', 'Name'],
         [SHEET_NAMES.CATEGORIES]: ['ID', 'Name']
       };
@@ -314,7 +314,7 @@ export class SheetService {
   async getTasks(): Promise<Task[]> {
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A2:K`,
+      range: `${SHEET_NAMES.TASKS}!A2:M`, // Expanded range to include CalendarEventId and Visibility
     });
     const rows = res.result.values || [];
     return rows.map((row: string[]) => ({
@@ -329,6 +329,8 @@ export class SheetService {
       status: row[8] as Status,
       createdAt: row[9],
       updatedAt: row[10],
+      calendarEventId: row[11] || undefined,
+      visibility: (row[12] as 'public' | 'private') || 'public',
     }));
   }
 
@@ -340,6 +342,7 @@ export class SheetService {
       id,
       createdAt: now,
       updatedAt: now,
+      visibility: task.visibility || 'public', // default
     };
 
     const row = [
@@ -354,6 +357,8 @@ export class SheetService {
       newTask.status,
       newTask.createdAt,
       newTask.updatedAt,
+      newTask.calendarEventId || '',
+      newTask.visibility,
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.append({
@@ -388,11 +393,13 @@ export class SheetService {
       updatedTask.status,
       updatedTask.createdAt,
       updatedTask.updatedAt,
+      updatedTask.calendarEventId || '',
+      updatedTask.visibility,
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A${rowIndex}:K${rowIndex}`,
+      range: `${SHEET_NAMES.TASKS}!A${rowIndex}:M${rowIndex}`,
       valueInputOption: 'USER_ENTERED',
       resource: { values: [row] }
     });
@@ -414,6 +421,18 @@ export class SheetService {
     const index = tasks.findIndex(t => t.id === taskId);
     if (index === -1) throw new Error('Task not found');
 
+    const task = tasks[index];
+
+    // Googleカレンダーからの削除を試行
+    if (task.calendarEventId) {
+        try {
+            await this.removeFromCalendar(task.calendarEventId);
+        } catch (e) {
+            console.warn("Failed to remove from calendar (might be already deleted)", e);
+            // カレンダー削除に失敗してもタスク削除は続行する
+        }
+    }
+
     const sheetId = await this.getSheetId(SHEET_NAMES.TASKS);
     
     await window.gapi.client.sheets.spreadsheets.batchUpdate({
@@ -424,10 +443,7 @@ export class SheetService {
             range: {
               sheetId: sheetId,
               dimension: 'ROWS',
-              startIndex: index + 1, // 0-based, skip header (index 0 is header) -> actually header is row 0. data starts row 1.
-              // Wait, sheet API uses 0-based index. Header is 0. Data 0 is Row 1.
-              // Task index 0 is Row 2 (index 1).
-              // So startIndex = index + 1.
+              startIndex: index + 1,
               endIndex: index + 2
             }
           }
@@ -476,6 +492,22 @@ export class SheetService {
     } catch (e: any) {
       console.error("Failed to add to calendar", e);
       throw new Error("カレンダーへの追加に失敗しました。権限がないか、エラーが発生しました。");
+    }
+  }
+
+  async removeFromCalendar(eventId: string): Promise<void> {
+    try {
+      await window.gapi.client.calendar.events.delete({
+        calendarId: 'primary',
+        eventId: eventId,
+      });
+    } catch (e: any) {
+      if (e.status === 404 || e.result?.error?.code === 404) {
+         console.log("Event not found in calendar, likely already deleted.");
+         return;
+      }
+      console.error("Failed to remove from calendar", e);
+      throw e;
     }
   }
 }

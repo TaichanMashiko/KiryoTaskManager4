@@ -27,6 +27,7 @@ export const MOCK_TASKS: Task[] = [
     status: Status.COMPLETED,
     createdAt: '2023-09-28T09:00:00Z',
     updatedAt: '2023-10-05T14:00:00Z',
+    visibility: 'public',
   },
   {
     id: 't2',
@@ -40,6 +41,7 @@ export const MOCK_TASKS: Task[] = [
     status: Status.IN_PROGRESS,
     createdAt: '2023-10-01T10:00:00Z',
     updatedAt: '2023-10-06T09:30:00Z',
+    visibility: 'public',
   },
   {
     id: 't3',
@@ -53,6 +55,7 @@ export const MOCK_TASKS: Task[] = [
     status: Status.NOT_STARTED,
     createdAt: '2023-10-05T11:00:00Z',
     updatedAt: '2023-10-05T11:00:00Z',
+    visibility: 'public',
   },
   {
     id: 't4',
@@ -66,5 +69,6 @@ export const MOCK_TASKS: Task[] = [
     status: Status.NOT_STARTED,
     createdAt: '2023-10-10T15:00:00Z',
     updatedAt: '2023-10-10T15:00:00Z',
+    visibility: 'public',
   },
 ];

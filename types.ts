@@ -37,6 +37,8 @@ export interface Task {
   status: Status;
   createdAt: string;
   updatedAt: string;
+  calendarEventId?: string; // Google Calendar Event ID
+  visibility: 'public' | 'private'; // public: task, private: personal todo
 }
 
 export interface Category {

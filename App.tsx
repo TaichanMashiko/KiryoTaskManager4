@@ -21,6 +21,7 @@ function App() {
   
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.LIST);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'task' | 'todo'>('task');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   // Filter States
@@ -145,7 +146,15 @@ function App() {
       // Handle Calendar Integration
       if (addToCalendar) {
           try {
-              await sheetService.addToCalendar(savedTask);
+              // Add to calendar and get the returned event object
+              const event = await sheetService.addToCalendar(savedTask);
+              
+              // Update the task with the Google Calendar Event ID
+              if (event && event.id) {
+                  savedTask.calendarEventId = event.id;
+                  await sheetService.updateTask(savedTask);
+              }
+              
               alert("Googleカレンダーに予定を追加しました。");
           } catch (calendarError: any) {
               console.error("Calendar Error", calendarError);
@@ -165,7 +174,7 @@ function App() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!window.confirm("本当にこのタスクを削除しますか？")) return;
+    if (!window.confirm("本当にこのタスクを削除しますか？カレンダーに連携されている場合、カレンダーからも削除されます。")) return;
     try {
       setLoading(true);
       await sheetService.deleteTask(taskId);
@@ -189,10 +198,20 @@ function App() {
     }
   };
 
+  const openModal = (mode: 'task' | 'todo', task?: Task) => {
+      setModalMode(mode);
+      setEditingTask(task || null);
+      setIsModalOpen(true);
+  }
+
   // --- Filtering ---
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
+      // Visibility Filter: Show if public OR (private AND assignee is current user)
+      const isVisible = task.visibility !== 'private' || (currentUser && task.assigneeEmail === currentUser.email);
+      if (!isVisible) return false;
+
       const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             task.detail.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -207,7 +226,7 @@ function App() {
 
       return matchesSearch && matchesAssignee && matchesStatus && matchesDepartment;
     });
-  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, users]);
+  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, users, currentUser]);
 
   // --- UI Rendering ---
 
@@ -263,7 +282,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.0</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.1</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
@@ -360,13 +379,22 @@ function App() {
                 </button>
              </div>
 
-             <button
-                onClick={() => { setEditingTask(null); setIsModalOpen(true); }}
-                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition-colors text-sm font-medium"
-             >
-                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                タスク作成
-             </button>
+             <div className="flex gap-2">
+                <button
+                    onClick={() => openModal('todo')}
+                    className="flex items-center px-3 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 shadow-sm transition-colors text-sm font-medium whitespace-nowrap"
+                >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    TODO作成
+                </button>
+                <button
+                    onClick={() => openModal('task')}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition-colors text-sm font-medium whitespace-nowrap"
+                >
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                    タスク作成
+                </button>
+             </div>
           </div>
         </div>
 
@@ -382,7 +410,7 @@ function App() {
             <TaskTable
               tasks={filteredTasks}
               users={users}
-              onEdit={(t) => { setEditingTask(t); setIsModalOpen(true); }}
+              onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
               onDelete={handleDeleteTask}
             />
           )}
@@ -392,7 +420,7 @@ function App() {
               tasks={filteredTasks}
               users={users}
               onTaskMove={handleTaskMove}
-              onEdit={(t) => { setEditingTask(t); setIsModalOpen(true); }}
+              onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
             />
           )}
 
@@ -400,7 +428,7 @@ function App() {
              <GanttChart
                tasks={filteredTasks}
                users={users}
-               onEdit={(t) => { setEditingTask(t); setIsModalOpen(true); }}
+               onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
                onTaskUpdate={async (updatedTask) => {
                   // Immediate local update for smoothness
                   setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
@@ -423,6 +451,8 @@ function App() {
         task={editingTask}
         users={users}
         categories={categories.map(c => c.name)}
+        currentUser={currentUser}
+        mode={modalMode}
       />
     </div>
   );
