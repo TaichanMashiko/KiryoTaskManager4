@@ -282,7 +282,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.1</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.2</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
@@ -421,6 +421,7 @@ function App() {
               users={users}
               onTaskMove={handleTaskMove}
               onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
+              onDelete={handleDeleteTask}
             />
           )}
 
@@ -438,6 +439,7 @@ function App() {
                       loadData(true);
                   }
                }}
+               onDelete={handleDeleteTask}
              />
           )}
         </div>

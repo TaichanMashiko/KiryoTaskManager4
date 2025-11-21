@@ -7,6 +7,7 @@ interface GanttChartProps {
   users: User[];
   onEdit: (task: Task) => void;
   onTaskUpdate?: (task: Task) => void;
+  onDelete: (taskId: string) => void;
 }
 
 interface DragState {
@@ -17,7 +18,7 @@ interface DragState {
   originalEnd: Date;
 }
 
-export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, onTaskUpdate }) => {
+export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, onTaskUpdate, onDelete }) => {
   const colWidth = 40; // Width of one day column in pixels
   const headerHeight = 48;
   const rowHeight = 48;
@@ -245,10 +246,19 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
               const width = renderDuration * colWidth;
 
               return (
-                <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 transition-colors relative z-10" style={{ height: rowHeight }}>
+                <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 transition-colors relative z-10 group" style={{ height: rowHeight }}>
                   {/* Sticky Task Name */}
                   <div className="sticky left-0 z-20 w-64 bg-white group-hover:bg-gray-50 border-r border-gray-200 p-3 flex items-center justify-between shadow-[1px_0_3px_rgba(0,0,0,0.05)]">
-                    <div className="truncate text-sm font-medium text-gray-700 pr-2 cursor-pointer hover:text-indigo-600" onClick={() => onEdit(task)} title={task.title}>
+                    
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+                        className="text-gray-300 hover:text-red-500 mr-2 p-1 rounded transition-colors"
+                        title="削除"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+
+                    <div className="truncate text-sm font-medium text-gray-700 pr-2 flex-1 cursor-pointer hover:text-indigo-600" onClick={() => onEdit(task)} title={task.title}>
                       {task.title}
                     </div>
                     <div className="flex-shrink-0 w-6 h-6 bg-indigo-50 rounded-full flex items-center justify-center text-xs text-indigo-600 font-bold">
@@ -257,7 +267,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                   </div>
 
                   {/* Timeline Area for this row */}
-                  <div className="relative flex-1 group">
+                  <div className="relative flex-1">
                     <div
                       className={`absolute top-2 h-8 rounded-md shadow-sm flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden ${getStatusColor(task.status)}`}
                       style={{ 
