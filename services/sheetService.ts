@@ -126,11 +126,11 @@ class SheetService {
       const requests = [];
 
       // Define headers for each sheet
-      // Note: 'Googleアカウント管理' structure is based on the provided GAS code:
-      // Col 0: ID, 1: Email, 2: Role, 3: Year, 4: Class, 5: No, 6: Name
+      // Updated for Teacher/Staff context
+      // Users Sheet: Col 0: ID, 1: Email, 2: Role, 3: Department, 4: Name
       const headers: Record<string, string[]> = {
         [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt'],
-        [SHEET_NAMES.USERS]: ['StudentID', 'Email', 'Role', 'Year', 'Class', 'No', 'Name'],
+        [SHEET_NAMES.USERS]: ['ID', 'Email', 'Role', 'Department', 'Name'],
         [SHEET_NAMES.CATEGORIES]: ['ID', 'Name']
       };
 
@@ -165,13 +165,13 @@ class SheetService {
           });
           
           // If Users sheet (Googleアカウント管理), add current user as admin automatically
-          // Use columns: ID, Email, Role, Year, Class, No, Name
+          // Use columns: ID, Email, Role, Department, Name
           if (name === SHEET_NAMES.USERS && this.currentUserEmail) {
              await window.gapi.client.sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID,
                 range: `${SHEET_NAMES.USERS}!A2`,
                 valueInputOption: 'USER_ENTERED',
-                resource: { values: [['0001', this.currentUserEmail, '管理者', '', '', '', this.currentUserName || 'Admin User']] }
+                resource: { values: [['0001', this.currentUserEmail, '管理者', 'システム管理', this.currentUserName || 'Admin User']] }
              });
           }
            // If Categories sheet, add default categories
@@ -181,7 +181,7 @@ class SheetService {
                 range: `${SHEET_NAMES.CATEGORIES}!A2`,
                 valueInputOption: 'USER_ENTERED',
                 resource: { values: [
-                    ['1', '開発'], ['2', 'デザイン'], ['3', 'マーケティング'], ['4', '事務']
+                    ['1', '教務'], ['2', '進路'], ['3', '生徒指導'], ['4', '総務'], ['5', '学年団']
                 ] }
              });
           }
@@ -210,11 +210,10 @@ class SheetService {
       try {
         // Default values for new user
         const newName = this.currentUserName || this.currentUserEmail;
-        const newRole = '生徒'; // Default role (maps to 'user' in frontend)
+        const newRole = '一般'; // Default role (maps to 'user' in frontend)
         
-        // Structure: 0:ID, 1:Email, 2:Role, 3:Year, 4:Class, 5:No, 6:Name
-        // We'll use 'auto' for ID or leave it blank if GAS generates it, but here we just put a placeholder
-        const newRow = ['auto', this.currentUserEmail, newRole, '', '', '', newName];
+        // Structure: 0:ID, 1:Email, 2:Role, 3:Department, 4:Name
+        const newRow = ['auto', this.currentUserEmail, newRole, '', newName];
 
         await window.gapi.client.sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
@@ -240,21 +239,21 @@ class SheetService {
 
   async getUsers(): Promise<User[]> {
     // Fetch from 'Googleアカウント管理'
-    // Structure: 0:ID, 1:Email, 2:Role, 3:Year, 4:Class, 5:No, 6:Name
+    // Structure: 0:ID, 1:Email, 2:Role, 3:Department, 4:Name
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.USERS}!A2:G`,
+      range: `${SHEET_NAMES.USERS}!A2:E`,
     });
     const rows = res.result.values || [];
     
     return rows.map((row: string[]) => {
-      const roleStr = row[2]; // '管理者', '生徒', etc.
-      // Map GAS roles to App roles
+      const roleStr = row[2]; // '管理者', '一般', etc.
+      // Map Sheet roles to App roles
       const role: 'admin' | 'user' = (roleStr === '管理者') ? 'admin' : 'user';
       
       return {
         email: row[1] || '',
-        name: row[6] || row[1] || 'Unknown', // Use Name (Col G) or fallback to Email
+        name: row[4] || row[1] || 'Unknown', // Name is now at index 4
         role: role,
         avatarUrl: undefined
       };
