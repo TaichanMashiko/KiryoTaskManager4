@@ -30,6 +30,9 @@ function App() {
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
+  
+  // 初回ロード時に自分のフィルタを適用したかどうかを管理
+  const [hasSetInitialFilter, setHasSetInitialFilter] = useState(false);
 
   // Initialize Google API Client on Mount
   useEffect(() => {
@@ -110,6 +113,14 @@ function App() {
     }
   }, [isSignedIn, loadData]);
 
+  // Set initial filter to current user
+  useEffect(() => {
+    if (currentUser && !hasSetInitialFilter) {
+      setFilterAssignee(currentUser.email);
+      setHasSetInitialFilter(true);
+    }
+  }, [currentUser, hasSetInitialFilter]);
+
   // Polling for concurrent edits (every 30 seconds)
   useEffect(() => {
     if (!isSignedIn) return;
@@ -128,6 +139,7 @@ function App() {
       setIsSignedIn(false);
       setTasks([]);
       setCurrentUser(null);
+      setHasSetInitialFilter(false);
     });
   };
 
@@ -318,7 +330,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.4</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.5</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (

@@ -72,9 +72,60 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
     };
   }, [tasks]);
 
-  // Valid tasks map for position calculation
-  const validTasks = useMemo(() => {
-      return tasks.filter(t => t.startDate && t.dueDate);
+  // 1. Filter valid tasks (must have dates)
+  // 2. Sort tasks topologically so connected tasks are adjacent
+  const sortedValidTasks = useMemo(() => {
+      const validTasks = tasks.filter(t => t.startDate && t.dueDate);
+      
+      // Map for quick access
+      const taskMap = new Map(validTasks.map(t => [t.id, t]));
+      
+      // Adjacency list: Parent ID -> [Child IDs]
+      const adjacency = new Map<string, string[]>();
+      const roots: Task[] = [];
+
+      // Build graph
+      validTasks.forEach(t => {
+          if (t.predecessorTaskId && taskMap.has(t.predecessorTaskId)) {
+              const parentId = t.predecessorTaskId;
+              if (!adjacency.has(parentId)) adjacency.set(parentId, []);
+              adjacency.get(parentId)!.push(t.id);
+          } else {
+              roots.push(t);
+          }
+      });
+
+      // Sort roots by start date initially
+      roots.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+      // DFS flatten
+      const result: Task[] = [];
+      const visited = new Set<string>();
+
+      const visit = (t: Task) => {
+          if (visited.has(t.id)) return;
+          visited.add(t.id);
+          result.push(t);
+
+          const childrenIds = adjacency.get(t.id) || [];
+          // Sort children by start date too
+          const children = childrenIds
+            .map(id => taskMap.get(id)!)
+            .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+            
+          children.forEach(child => visit(child));
+      };
+
+      roots.forEach(visit);
+
+      // Catch any orphans (cycles or disconnected parts not caught)
+      validTasks.forEach(t => {
+          if (!visited.has(t.id)) {
+              result.push(t);
+          }
+      });
+
+      return result;
   }, [tasks]);
 
   const getUserInitial = (email: string) => {
@@ -238,12 +289,12 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
 
             {/* Dependency Lines Layer */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" style={{ left: 256 }}>
-                {validTasks.map((task, index) => {
+                {sortedValidTasks.map((task, index) => {
                     if (!task.predecessorTaskId) return null;
-                    const predecessorIndex = validTasks.findIndex(t => t.id === task.predecessorTaskId);
+                    const predecessorIndex = sortedValidTasks.findIndex(t => t.id === task.predecessorTaskId);
                     if (predecessorIndex === -1) return null;
                     
-                    const predecessor = validTasks[predecessorIndex];
+                    const predecessor = sortedValidTasks[predecessorIndex];
                     const currentCoords = getTaskCoordinates(task, index);
                     const prevCoords = getTaskCoordinates(predecessor, predecessorIndex);
                     
@@ -255,9 +306,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                     const endX = currentCoords.x;
                     const endY = currentCoords.y;
 
-                    // Draw bezier curve
-                    const midX = (startX + endX) / 2;
-                    
                     // Ensure lines go forward properly even if task is back in time visually (though logically redundant)
                     const path = `M ${startX} ${startY} C ${startX + 20} ${startY}, ${endX - 20} ${endY}, ${endX} ${endY}`;
 
@@ -275,7 +323,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
             </svg>
 
             {/* Tasks */}
-            {validTasks.map((task, index) => {
+            {sortedValidTasks.map((task, index) => {
               const coords = getTaskCoordinates(task, index);
               if (!coords) return null;
               
