@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Task, User, Category, Priority, Status } from '../types';
+import { Task, User, Priority, Status } from '../types';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -8,7 +8,7 @@ interface TaskModalProps {
   onSave: (task: Partial<Task>) => void;
   task?: Task | null;
   users: User[];
-  categories: Category[];
+  categories: string[];
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, task, users, categories }) => {
@@ -24,7 +24,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
           title: '',
           detail: '',
           assigneeEmail: users[0]?.email || '',
-          category: categories[0]?.name || '',
+          category: categories[0] || '',
           priority: Priority.MEDIUM,
           status: Status.NOT_STARTED,
           startDate: new Date().toISOString().split('T')[0],
@@ -95,8 +95,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                   placeholder="カテゴリを入力"
                 />
                 <datalist id="category-suggestions">
-                  {categories.map(c => (
-                    <option key={c.id} value={c.name} />
+                  {categories.map((c, index) => (
+                    <option key={index} value={c} />
                   ))}
                 </datalist>
               </div>

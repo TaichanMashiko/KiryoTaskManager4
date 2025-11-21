@@ -1,17 +1,30 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Task, User, Status } from '../types';
 
 interface GanttChartProps {
   tasks: Task[];
   users: User[];
   onEdit: (task: Task) => void;
+  onTaskUpdate?: (task: Task) => void;
 }
 
-export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) => {
+interface DragState {
+  taskId: string;
+  type: 'left' | 'right';
+  startX: number;
+  originalStart: Date;
+  originalEnd: Date;
+}
+
+export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, onTaskUpdate }) => {
   const colWidth = 40; // Width of one day column in pixels
   const headerHeight = 48;
   const rowHeight = 48;
+
+  // Dragging state
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
 
   // Calculate timeline range based on tasks
   const { dates, startDate } = useMemo(() => {
@@ -75,13 +88,90 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) 
   const formatDate = (date: Date) => {
     return `${date.getMonth() + 1}/${date.getDate()}`;
   };
+  
+  const formatDateForInput = (date: Date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+  }
 
   const getDayName = (date: Date) => {
     return ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
   };
 
+  // Mouse Event Handlers
+  const handleMouseDown = (e: React.MouseEvent, taskId: string, type: 'left' | 'right', task: Task) => {
+      if (!task.startDate || !task.dueDate) return;
+      e.stopPropagation();
+      e.preventDefault();
+      setDragState({
+          taskId,
+          type,
+          startX: e.clientX,
+          originalStart: new Date(task.startDate),
+          originalEnd: new Date(task.dueDate)
+      });
+      setDragOffset(0);
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!dragState) return;
+    e.preventDefault();
+    setDragOffset(e.clientX - dragState.startX);
+  }, [dragState]);
+
+  const handleMouseUp = useCallback(() => {
+      if (!dragState || !onTaskUpdate) {
+          setDragState(null);
+          setDragOffset(0);
+          return;
+      }
+      
+      // Apply changes
+      const daysDelta = Math.round(dragOffset / colWidth);
+      if (daysDelta !== 0) {
+          const task = tasks.find(t => t.id === dragState.taskId);
+          if (task) {
+              let newStart = new Date(dragState.originalStart);
+              let newEnd = new Date(dragState.originalEnd);
+
+              if (dragState.type === 'left') {
+                  newStart.setDate(newStart.getDate() + daysDelta);
+              } else {
+                  newEnd.setDate(newEnd.getDate() + daysDelta);
+              }
+
+              // Validation: End cannot be before start
+              if (newStart <= newEnd) {
+                   onTaskUpdate({
+                       ...task,
+                       startDate: formatDateForInput(newStart),
+                       dueDate: formatDateForInput(newEnd)
+                   });
+              }
+          }
+      }
+
+      setDragState(null);
+      setDragOffset(0);
+  }, [dragState, dragOffset, colWidth, tasks, onTaskUpdate]);
+
+  // Global Listeners for Drag
+  useEffect(() => {
+      if (dragState) {
+          window.addEventListener('mousemove', handleMouseMove);
+          window.addEventListener('mouseup', handleMouseUp);
+      }
+      return () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('mouseup', handleMouseUp);
+      }
+  }, [dragState, handleMouseMove, handleMouseUp]);
+
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow flex flex-col h-full overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-lg shadow flex flex-col h-full overflow-hidden select-none">
       <div className="flex-1 overflow-auto relative">
         <div className="inline-block min-w-full relative">
           
@@ -133,16 +223,32 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) 
               const startDiff = Math.ceil((tStart.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
               let duration = Math.ceil((tEnd.getTime() - tStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
               
-              if (duration < 1) duration = 1;
+              // Drag Calculation Logic for Rendering
+              let renderStartDiff = startDiff;
+              let renderDuration = duration;
 
-              const left = startDiff * colWidth;
-              const width = duration * colWidth;
+              if (dragState && dragState.taskId === task.id) {
+                  const pixelDelta = dragOffset;
+                  const daysDelta = pixelDelta / colWidth; // fractional days
+
+                  if (dragState.type === 'left') {
+                      renderStartDiff += daysDelta;
+                      renderDuration -= daysDelta;
+                  } else {
+                      renderDuration += daysDelta;
+                  }
+              }
+
+              if (renderDuration < 1) renderDuration = 1; // Minimum width visually
+
+              const left = renderStartDiff * colWidth;
+              const width = renderDuration * colWidth;
 
               return (
                 <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 transition-colors relative z-10" style={{ height: rowHeight }}>
                   {/* Sticky Task Name */}
                   <div className="sticky left-0 z-20 w-64 bg-white group-hover:bg-gray-50 border-r border-gray-200 p-3 flex items-center justify-between shadow-[1px_0_3px_rgba(0,0,0,0.05)]">
-                    <div className="truncate text-sm font-medium text-gray-700 pr-2" title={task.title}>
+                    <div className="truncate text-sm font-medium text-gray-700 pr-2 cursor-pointer hover:text-indigo-600" onClick={() => onEdit(task)} title={task.title}>
                       {task.title}
                     </div>
                     <div className="flex-shrink-0 w-6 h-6 bg-indigo-50 rounded-full flex items-center justify-center text-xs text-indigo-600 font-bold">
@@ -151,18 +257,31 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit }) 
                   </div>
 
                   {/* Timeline Area for this row */}
-                  <div className="relative flex-1">
+                  <div className="relative flex-1 group">
                     <div
-                      onClick={() => onEdit(task)}
-                      className={`absolute top-2 h-8 rounded-md shadow-sm cursor-pointer flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden transition-all ${getStatusColor(task.status)}`}
+                      className={`absolute top-2 h-8 rounded-md shadow-sm flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden ${getStatusColor(task.status)}`}
                       style={{ 
                         left: `${left}px`, 
-                        width: `${width}px`, 
-                        maxWidth: '100%'
+                        width: `${width}px`,
+                        cursor: 'pointer'
                       }}
-                      title={`${task.title} (${task.startDate} ~ ${task.dueDate})`}
                     >
-                      {task.title}
+                       {/* Drag Handle Left */}
+                       <div 
+                           className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 z-20"
+                           onMouseDown={(e) => handleMouseDown(e, task.id, 'left', task)}
+                       />
+                       
+                       {/* Content Area (Click to edit) */}
+                       <div className="flex-1 h-full flex items-center overflow-hidden" onClick={() => onEdit(task)}>
+                           {task.title}
+                       </div>
+
+                       {/* Drag Handle Right */}
+                       <div 
+                           className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 z-20"
+                           onMouseDown={(e) => handleMouseDown(e, task.id, 'right', task)}
+                       />
                     </div>
                   </div>
                 </div>

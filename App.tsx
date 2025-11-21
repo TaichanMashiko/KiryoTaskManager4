@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { TaskTable } from './components/TaskTable';
 import { KanbanBoard } from './components/KanbanBoard';
 import { GanttChart } from './components/GanttChart';
@@ -37,6 +37,11 @@ function App() {
                 setIsSignedIn(signedIn);
             });
             setIsInitialized(true);
+            
+            // Try silent login if storage key exists
+            if (sheetService.hasStoredAuth()) {
+                sheetService.signIn(true);
+            }
         } catch (e: any) {
             console.error("Init failed", e);
             setInitError(e?.message || JSON.stringify(e) || "Google APIの初期化に失敗しました。");
@@ -45,44 +50,58 @@ function App() {
     init();
   }, []);
 
-  // Load Data when Signed In
-  useEffect(() => {
-    if (isSignedIn) {
-      const loadData = async () => {
-        setLoading(true);
-        setAuthError(null);
-        try {
-          // Ensure sheets exist
-          await sheetService.initializeSheets();
+  // Load Data
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setAuthError(null);
+    try {
+      // Ensure sheets exist (only need to do this once really, but safe to repeat)
+      if (!silent) await sheetService.initializeSheets();
 
+      if (!currentUser) {
           const userData = await sheetService.getCurrentUser();
           if (!userData) {
-             setAuthError("あなたのアカウントは「Googleアカウント管理」シートに登録されていません。管理者に連絡してください。");
-             return;
+              setAuthError("あなたのアカウントは「Googleアカウント管理」シートに登録されていません。管理者に連絡してください。");
+              return;
           }
           setCurrentUser(userData);
+      }
 
-          const [userList, catList, taskList] = await Promise.all([
-            sheetService.getUsers(),
-            sheetService.getCategories(),
-            sheetService.getTasks(),
-          ]);
-          setUsers(userList);
-          setCategories(catList);
-          setTasks(taskList);
-        } catch (error: any) {
-          console.error("Failed to load data", error);
-          setAuthError("データの読み込みに失敗しました: " + (error?.result?.error?.message || error.message));
-        } finally {
-          setLoading(false);
-        }
-      };
+      const [userList, catList, taskList] = await Promise.all([
+        sheetService.getUsers(),
+        sheetService.getCategories(),
+        sheetService.getTasks(),
+      ]);
+      setUsers(userList);
+      setCategories(catList);
+      setTasks(taskList);
+    } catch (error: any) {
+      console.error("Failed to load data", error);
+      if (!silent) setAuthError("データの読み込みに失敗しました: " + (error?.result?.error?.message || error.message));
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [currentUser]);
+
+  // Initial Load when Signed In
+  useEffect(() => {
+    if (isSignedIn) {
       loadData();
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, loadData]);
+
+  // Polling for concurrent edits (every 30 seconds)
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const interval = setInterval(() => {
+        console.log("Polling for updates...");
+        loadData(true); // Silent load
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isSignedIn, loadData]);
 
   const handleSignIn = () => {
-      sheetService.signIn();
+      sheetService.signIn(false);
   };
 
   // Extract unique departments from users
@@ -91,6 +110,14 @@ function App() {
     return Array.from(depts);
   }, [users]);
 
+  // Combine master categories and used categories from tasks for suggestions
+  const categorySuggestions = useMemo(() => {
+    const masterNames = categories.map(c => c.name);
+    const usedNames = tasks.map(t => t.category).filter(c => c); // Get categories from existing tasks
+    // Create unique set and sort
+    return Array.from(new Set([...masterNames, ...usedNames])).sort();
+  }, [categories, tasks]);
+
   const filteredTasks = useMemo(() => {
     return tasks.filter(task => {
       const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -98,7 +125,7 @@ function App() {
       const matchesAssignee = filterAssignee ? task.assigneeEmail === filterAssignee : true;
       const matchesStatus = filterStatus ? task.status === filterStatus : true;
       
-      // Department Filter Logic: Find assignee and check their department
+      // Department Filter Logic
       const assignee = users.find(u => u.email === task.assigneeEmail);
       const matchesDepartment = filterDepartment 
         ? (assignee?.department === filterDepartment) 
@@ -136,6 +163,21 @@ function App() {
       alert("保存に失敗しました。");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDirectUpdate = async (updatedTask: Task) => {
+    // Update local state immediately for UI responsiveness
+    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    
+    // Then sync with server
+    try {
+        await sheetService.updateTask(updatedTask);
+    } catch(e) {
+        console.error("Update failed", e);
+        alert("変更の保存に失敗しました。");
+        // Revert via reload or optimistic rollback (simple reload for now)
+        loadData(true); 
     }
   };
 
@@ -182,7 +224,7 @@ function App() {
     );
   }
 
-  // Authentication Error State (User not found in sheet)
+  // Authentication Error State
   if (authError) {
      return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
@@ -315,7 +357,7 @@ function App() {
               <select
                 value={filterDepartment}
                 onChange={(e) => setFilterDepartment(e.target.value)}
-                className="block w-full sm:w-auto flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
+                className="block w-full flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600 sm:w-auto"
               >
                 <option value="">全部署</option>
                 {departments.map(dept => (
@@ -327,7 +369,7 @@ function App() {
             <select
               value={filterAssignee}
               onChange={(e) => setFilterAssignee(e.target.value)}
-              className="block w-full sm:w-auto flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
+              className="block w-full flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600 sm:w-auto"
             >
               <option value="">全担当者</option>
               {users.map(u => (
@@ -338,7 +380,7 @@ function App() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="block w-full sm:w-auto flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
+              className="block w-full flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600 sm:w-auto"
             >
               <option value="">全ステータス</option>
               {Object.values(Status).map(s => (
@@ -375,6 +417,7 @@ function App() {
                tasks={filteredTasks}
                users={users}
                onEdit={handleEditTask}
+               onTaskUpdate={handleDirectUpdate}
              />
           )}
         </div>
@@ -386,7 +429,7 @@ function App() {
         onSave={handleSaveTask}
         task={editingTask}
         users={users}
-        categories={categories}
+        categories={categorySuggestions}
       />
     </div>
   );
