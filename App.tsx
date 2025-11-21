@@ -4,7 +4,7 @@ import { TaskTable } from './components/TaskTable';
 import { KanbanBoard } from './components/KanbanBoard';
 import { GanttChart } from './components/GanttChart';
 import { TaskModal } from './components/TaskModal';
-import { AdminDashboard } from './components/AdminDashboard';
+import { Dashboard } from './components/AdminDashboard';
 import { sheetService } from './services/sheetService';
 import { Task, User, Category, ViewMode, Status } from './types';
 
@@ -318,7 +318,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.3</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.4</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
@@ -330,19 +330,17 @@ function App() {
                 </div>
             )}
             
-            {/* 管理者ボタン */}
-            {currentUser?.role === 'admin' && (
-               <button
-                  onClick={() => setViewMode(viewMode === ViewMode.ADMIN ? ViewMode.LIST : ViewMode.ADMIN)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${
-                      viewMode === ViewMode.ADMIN 
-                      ? 'bg-gray-800 text-white border-gray-800' 
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
-               >
-                  {viewMode === ViewMode.ADMIN ? 'タスク画面へ戻る' : '管理者ダッシュボード'}
-               </button>
-            )}
+            {/* ダッシュボードボタン (全員閲覧可能) */}
+            <button
+                onClick={() => setViewMode(viewMode === ViewMode.DASHBOARD ? ViewMode.LIST : ViewMode.DASHBOARD)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${
+                    viewMode === ViewMode.DASHBOARD
+                    ? 'bg-gray-800 text-white border-gray-800' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+            >
+                {viewMode === ViewMode.DASHBOARD ? 'タスク画面へ戻る' : 'ダッシュボード'}
+            </button>
 
             <button
               onClick={handleSignOut}
@@ -368,10 +366,10 @@ function App() {
             </div>
         )}
 
-        {/* Admin View Handling */}
-        {viewMode === ViewMode.ADMIN ? (
+        {/* Dashboard View */}
+        {viewMode === ViewMode.DASHBOARD ? (
             <div className="flex-1 overflow-auto">
-               <AdminDashboard tasks={tasks} users={users} />
+               <Dashboard tasks={tasks} users={users} />
             </div>
         ) : (
             <>

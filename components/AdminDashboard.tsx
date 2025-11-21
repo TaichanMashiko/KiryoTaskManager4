@@ -2,12 +2,12 @@
 import React, { useMemo } from 'react';
 import { Task, User, Status } from '../types';
 
-interface AdminDashboardProps {
+interface DashboardProps {
   tasks: Task[];
   users: User[];
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ tasks, users }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ tasks, users }) => {
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -15,7 +15,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ tasks, users }) 
       const userTasks = tasks.filter(t => t.assigneeEmail === user.email);
       
       // 今日のタスク（未完了 かつ 期限が今日）
-      // または、期限切れの未完了タスクも含めるとより親切ですが、今回は「今日のタスク」という要望に合わせます
       const tasksDueToday = userTasks.filter(t => 
         t.status !== Status.COMPLETED && 
         t.dueDate === todayStr
@@ -43,17 +42,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ tasks, users }) 
   return (
     <div className="space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">教職員タスク負荷状況</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">チーム負荷状況ダッシュボード</h2>
         <p className="text-sm text-gray-500 mb-6">
-            各教員の現在のタスク保有数、本日の締切数、および過去の消化実績を表示しています。<br/>
-            <span className="text-xs text-gray-400">※デフォルトでは現在抱えているタスクが多い順に表示されます。</span>
+            各メンバーの現在のタスク保有数、本日の締切数、および過去の消化実績を表示しています。<br/>
+            タスクの偏りを確認し、助け合いの目安にしてください。
         </p>
 
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">教職員名</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">メンバー</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     本日締切<br/><span className="text-[10px] font-normal text-red-500">要対応</span>
                 </th>
@@ -110,7 +109,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ tasks, users }) 
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
-              <h3 className="text-gray-500 text-sm font-medium uppercase">全教職員の総残務タスク</h3>
+              <h3 className="text-gray-500 text-sm font-medium uppercase">チーム総残務タスク</h3>
               <p className="text-3xl font-bold text-gray-800 mt-2">
                   {stats.reduce((acc, cur) => acc + cur.activeCount, 0)} <span className="text-sm font-normal text-gray-500">件</span>
               </p>

@@ -21,6 +21,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
     return user ? user.name : email;
   };
 
+  const getPredecessorName = (predecessorId: string) => {
+    const task = tasks.find(t => t.id === predecessorId);
+    return task ? task.title : '不明';
+  };
+
   const getHeaderStyles = (status: string) => {
     switch (status) {
       case Status.COMPLETED:
@@ -118,11 +123,25 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
                 >
                   <div className="flex justify-between items-start mb-2">
                     <Badge type="priority" value={task.priority} />
-                    <span className="text-xs text-gray-400">{task.dueDate}まで</span>
+                    <div className="flex flex-col items-end">
+                        <span className="text-xs text-gray-400">{task.dueDate}まで</span>
+                        {task.visibility === 'private' && (
+                            <span title="非公開タスク" className="text-gray-400 mt-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                            </span>
+                        )}
+                    </div>
                   </div>
                   <h4 className="font-semibold text-gray-800 mb-1">{task.title}</h4>
                   <p className="text-xs text-gray-500 line-clamp-2 mb-3">{task.detail}</p>
                   
+                  {task.predecessorTaskId && (
+                      <div className="mb-2 text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded border border-indigo-100 flex items-center">
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                          <span className="truncate">待: {getPredecessorName(task.predecessorTaskId)}</span>
+                      </div>
+                  )}
+
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center text-xs text-gray-500">
                        <span className="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-[10px] mr-1 font-bold">

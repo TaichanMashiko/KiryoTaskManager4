@@ -12,7 +12,7 @@ interface GanttChartProps {
 
 interface DragState {
   taskId: string;
-  type: 'left' | 'right';
+  type: 'left' | 'right' | 'move';
   startX: number;
   originalStart: Date;
   originalEnd: Date;
@@ -72,6 +72,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
     };
   }, [tasks]);
 
+  // Valid tasks map for position calculation
+  const validTasks = useMemo(() => {
+      return tasks.filter(t => t.startDate && t.dueDate);
+  }, [tasks]);
+
   const getUserInitial = (email: string) => {
     const user = users.find(u => u.email === email);
     return user ? user.name.charAt(0) : '?';
@@ -102,7 +107,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
   };
 
   // Mouse Event Handlers
-  const handleMouseDown = (e: React.MouseEvent, taskId: string, type: 'left' | 'right', task: Task) => {
+  const handleMouseDown = (e: React.MouseEvent, taskId: string, type: 'left' | 'right' | 'move', task: Task) => {
       if (!task.startDate || !task.dueDate) return;
       e.stopPropagation();
       e.preventDefault();
@@ -137,7 +142,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
               let newStart = new Date(dragState.originalStart);
               let newEnd = new Date(dragState.originalEnd);
 
-              if (dragState.type === 'left') {
+              if (dragState.type === 'move') {
+                  newStart.setDate(newStart.getDate() + daysDelta);
+                  newEnd.setDate(newEnd.getDate() + daysDelta);
+              } else if (dragState.type === 'left') {
                   newStart.setDate(newStart.getDate() + daysDelta);
               } else {
                   newEnd.setDate(newEnd.getDate() + daysDelta);
@@ -170,6 +178,20 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
       }
   }, [dragState, handleMouseMove, handleMouseUp]);
 
+  // Helper to get coordinates for a task
+  const getTaskCoordinates = (task: Task, index: number) => {
+      if (!task.startDate || !task.dueDate) return null;
+      const tStart = new Date(task.startDate);
+      const tEnd = new Date(task.dueDate);
+      const startDiff = Math.ceil((tStart.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const duration = Math.ceil((tEnd.getTime() - tStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      const x = startDiff * colWidth;
+      const width = duration * colWidth;
+      const y = (index * rowHeight) + (rowHeight / 2);
+
+      return { x, width, y };
+  };
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow flex flex-col h-full overflow-hidden select-none">
@@ -214,36 +236,70 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                })}
             </div>
 
-            {tasks.map((task) => {
-              if (!task.startDate || !task.dueDate) return null;
+            {/* Dependency Lines Layer */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" style={{ left: 256 }}>
+                {validTasks.map((task, index) => {
+                    if (!task.predecessorTaskId) return null;
+                    const predecessorIndex = validTasks.findIndex(t => t.id === task.predecessorTaskId);
+                    if (predecessorIndex === -1) return null;
+                    
+                    const predecessor = validTasks[predecessorIndex];
+                    const currentCoords = getTaskCoordinates(task, index);
+                    const prevCoords = getTaskCoordinates(predecessor, predecessorIndex);
+                    
+                    if (!currentCoords || !prevCoords) return null;
+
+                    // Calculate connection points
+                    const startX = prevCoords.x + prevCoords.width;
+                    const startY = prevCoords.y;
+                    const endX = currentCoords.x;
+                    const endY = currentCoords.y;
+
+                    // Draw bezier curve
+                    const midX = (startX + endX) / 2;
+                    
+                    // Ensure lines go forward properly even if task is back in time visually (though logically redundant)
+                    const path = `M ${startX} ${startY} C ${startX + 20} ${startY}, ${endX - 20} ${endY}, ${endX} ${endY}`;
+
+                    return (
+                        <g key={`link-${task.id}`}>
+                            <path d={path} fill="none" stroke="#9CA3AF" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                        </g>
+                    );
+                })}
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#9CA3AF" />
+                    </marker>
+                </defs>
+            </svg>
+
+            {/* Tasks */}
+            {validTasks.map((task, index) => {
+              const coords = getTaskCoordinates(task, index);
+              if (!coords) return null;
               
-              const tStart = new Date(task.startDate);
-              const tEnd = new Date(task.dueDate);
-              
-              // Calculate days difference from timeline start
-              const startDiff = Math.ceil((tStart.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-              let duration = Math.ceil((tEnd.getTime() - tStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-              
-              // Drag Calculation Logic for Rendering
-              let renderStartDiff = startDiff;
-              let renderDuration = duration;
+              const { x: leftBase, width: widthBase } = coords;
+
+              // Apply Drag Offsets
+              let left = leftBase;
+              let width = widthBase;
 
               if (dragState && dragState.taskId === task.id) {
                   const pixelDelta = dragOffset;
-                  const daysDelta = pixelDelta / colWidth; // fractional days
+                  const daysDelta = pixelDelta / colWidth;
 
-                  if (dragState.type === 'left') {
-                      renderStartDiff += daysDelta;
-                      renderDuration -= daysDelta;
+                  if (dragState.type === 'move') {
+                      left += pixelDelta;
+                  } else if (dragState.type === 'left') {
+                      left += pixelDelta;
+                      width -= pixelDelta;
                   } else {
-                      renderDuration += daysDelta;
+                      width += pixelDelta;
                   }
               }
 
-              if (renderDuration < 1) renderDuration = 1; // Minimum width visually
-
-              const left = renderStartDiff * colWidth;
-              const width = renderDuration * colWidth;
+              if (width < colWidth) width = colWidth; // Minimum 1 day visual
 
               return (
                 <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 transition-colors relative z-10 group" style={{ height: rowHeight }}>
@@ -258,7 +314,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
 
-                    <div className="truncate text-sm font-medium text-gray-700 pr-2 flex-1 cursor-pointer hover:text-indigo-600" onClick={() => onEdit(task)} title={task.title}>
+                    <div className="truncate text-sm font-medium text-gray-700 pr-2 flex-1 cursor-pointer hover:text-indigo-600 flex items-center" onClick={() => onEdit(task)} title={task.title}>
+                      {task.visibility === 'private' && (
+                          <svg className="w-3 h-3 mr-1 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                      )}
                       {task.title}
                     </div>
                     <div className="flex-shrink-0 w-6 h-6 bg-indigo-50 rounded-full flex items-center justify-center text-xs text-indigo-600 font-bold">
@@ -273,23 +332,24 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                       style={{ 
                         left: `${left}px`, 
                         width: `${width}px`,
-                        cursor: 'pointer'
+                        cursor: 'move'
                       }}
+                      onMouseDown={(e) => handleMouseDown(e, task.id, 'move', task)}
                     >
                        {/* Drag Handle Left */}
                        <div 
-                           className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 z-20"
+                           className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-black/20 z-20"
                            onMouseDown={(e) => handleMouseDown(e, task.id, 'left', task)}
                        />
                        
-                       {/* Content Area (Click to edit) */}
-                       <div className="flex-1 h-full flex items-center overflow-hidden" onClick={() => onEdit(task)}>
+                       {/* Content Area */}
+                       <div className="flex-1 h-full flex items-center overflow-hidden pl-2 pointer-events-none">
                            {task.title}
                        </div>
 
                        {/* Drag Handle Right */}
                        <div 
-                           className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-black/20 z-20"
+                           className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-black/20 z-20"
                            onMouseDown={(e) => handleMouseDown(e, task.id, 'right', task)}
                        />
                     </div>

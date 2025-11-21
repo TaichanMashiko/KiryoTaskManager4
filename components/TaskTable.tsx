@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Task, User } from '../types';
 import { Badge } from './Badge';
@@ -37,6 +38,11 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDe
     return user ? user.name : email;
   };
 
+  const getPredecessorName = (predecessorId: string) => {
+      const task = tasks.find(t => t.id === predecessorId);
+      return task ? task.title : '不明なタスク';
+  };
+
   const thClass = "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 transition-colors select-none";
 
   return (
@@ -57,8 +63,21 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDe
           {sortedTasks.map((task) => (
             <tr key={task.id} className="hover:bg-gray-50 transition-colors group">
               <td className="px-6 py-4">
-                <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                <div className="flex items-center">
+                    {task.visibility === 'private' && (
+                        <span title="このタスクは他のユーザーには見えていません" className="mr-2 text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        </span>
+                    )}
+                    <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                </div>
                 <div className="text-xs text-gray-500 truncate max-w-xs">{task.detail}</div>
+                {task.predecessorTaskId && (
+                    <div className="mt-1 flex items-center text-xs text-indigo-600" title={`前提タスク: ${getPredecessorName(task.predecessorTaskId)}`}>
+                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                        待ち: {getPredecessorName(task.predecessorTaskId)}
+                    </div>
+                )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <Badge type="status" value={task.status} />
