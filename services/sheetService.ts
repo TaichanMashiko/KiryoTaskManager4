@@ -1,3 +1,4 @@
+
 import { Task, User, Category, Status, Priority, SPREADSHEET_ID, SHEET_NAMES } from '../types';
 import { GOOGLE_API_KEY, GOOGLE_CLIENT_ID, SCOPES, DISCOVERY_DOCS } from '../config';
 
@@ -45,6 +46,12 @@ class SheetService {
               if (resp.error !== undefined) {
                 throw resp;
               }
+              // IMPORTANT: Set the token for gapi client to use in subsequent requests
+              const token = resp.access_token;
+              if (token) {
+                window.gapi.client.setToken(resp);
+              }
+
               // Token acquired, now we can check user info
               await this.fetchUserInfo();
               onSignInUpdate(true);
@@ -91,6 +98,7 @@ class SheetService {
   // Prompt user to sign in
   signIn(): void {
     if (this.tokenClient) {
+      // Request permissions. If scopes changed, this triggers consent screen.
       this.tokenClient.requestAccessToken({ prompt: '' });
     }
   }
@@ -98,17 +106,26 @@ class SheetService {
   // Get authenticated user's email and name
   private async fetchUserInfo() {
     try {
+      const tokenObj = window.gapi.client.getToken();
+      if (!tokenObj) return;
+
       const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: {
-          Authorization: `Bearer ${window.gapi.client.getToken().access_token}`,
+          Authorization: `Bearer ${tokenObj.access_token}`,
         },
       });
+      
+      if (!response.ok) {
+          throw new Error(`UserInfo fetch failed: ${response.status}`);
+      }
+
       const data = await response.json();
       this.currentUserEmail = data.email;
       this.currentUserName = data.name;
       return data;
     } catch (e) {
       console.error("Failed to fetch user info", e);
+      // Do not throw, just log. Login check will fail gracefully in getCurrentUser or App.tsx
     }
   }
 
