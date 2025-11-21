@@ -11,15 +11,21 @@ interface TaskModalProps {
   categories: string[];
   currentUser?: User | null;
   mode: 'task' | 'todo'; // mode prop
+  allTasks: Task[]; // 全タスクリスト（前提タスク検索用）
 }
 
-export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, task, users, categories, currentUser, mode }) => {
+export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, task, users, categories, currentUser, mode, allTasks }) => {
   const [formData, setFormData] = useState<Partial<Task>>({});
   const [addToCalendar, setAddToCalendar] = useState(false);
+  
+  // 前提タスク検索用の状態
+  const [predecessorSearch, setPredecessorSearch] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setAddToCalendar(false); // Reset on open
+      setPredecessorSearch('');
       if (task) {
         setFormData({ ...task });
       } else {
@@ -34,6 +40,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
           startDate: new Date().toISOString().split('T')[0],
           dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
           visibility: mode === 'todo' ? 'private' : 'public',
+          predecessorTaskId: '',
         });
       }
     }
@@ -50,6 +57,22 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
     e.preventDefault();
     onSave(formData, addToCalendar);
   };
+
+  // 前提タスク関連
+  const predecessorTask = formData.predecessorTaskId 
+    ? allTasks.find(t => t.id === formData.predecessorTaskId) 
+    : null;
+
+  const filteredPredecessorCandidates = allTasks
+    .filter(t => {
+        // 自分自身は除外
+        if (task && t.id === task.id) return false;
+        // 既に選択されているものは除外（表示上）
+        if (t.id === formData.predecessorTaskId) return false;
+        // 検索クエリでフィルタ
+        return t.title.toLowerCase().includes(predecessorSearch.toLowerCase());
+    })
+    .slice(0, 5); // 上位5件のみ表示
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -114,6 +137,71 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                   ))}
                 </datalist>
               </div>
+            </div>
+
+            {/* 前提タスク入力エリア */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">前提タスク <span className="text-xs text-gray-400 font-normal">(完了しないとこのタスクを開始できません)</span></label>
+                {predecessorTask ? (
+                    <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-2 rounded-lg">
+                        <span className="text-sm truncate flex-1 mr-2">
+                             <span className="font-bold mr-2">ID:{predecessorTask.id.slice(-4)}</span>
+                             {predecessorTask.title}
+                             {predecessorTask.status === Status.COMPLETED ? (
+                                 <span className="ml-2 text-xs bg-green-200 text-green-800 px-1.5 py-0.5 rounded">完了済</span>
+                             ) : (
+                                 <span className="ml-2 text-xs bg-yellow-200 text-yellow-800 px-1.5 py-0.5 rounded">未完了</span>
+                             )}
+                        </span>
+                        <button 
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, predecessorTaskId: '' }))}
+                            className="text-indigo-400 hover:text-indigo-600 focus:outline-none"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={predecessorSearch}
+                            onChange={(e) => setPredecessorSearch(e.target.value)}
+                            onFocus={() => setIsSearchFocused(true)}
+                            onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)} // クリックイベントを許可するための遅延
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            placeholder="タスク名で検索..."
+                        />
+                        {isSearchFocused && predecessorSearch && (
+                            <div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto sm:text-sm">
+                                {filteredPredecessorCandidates.length > 0 ? (
+                                    filteredPredecessorCandidates.map((t) => (
+                                        <div
+                                            key={t.id}
+                                            onClick={() => {
+                                                setFormData(prev => ({ ...prev, predecessorTaskId: t.id }));
+                                                setPredecessorSearch('');
+                                            }}
+                                            className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-50 text-gray-900"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="truncate font-medium">{t.title}</span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ml-2 ${t.status === Status.COMPLETED ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    {t.status}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 truncate">{t.detail}</div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="cursor-default select-none relative py-2 pl-3 pr-9 text-gray-700">
+                                        見つかりません
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div>

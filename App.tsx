@@ -132,7 +132,31 @@ function App() {
 
   // --- Task Operations ---
 
+  // 前提タスクの依存関係をチェックするヘルパー関数
+  const checkDependency = (task: Partial<Task>): { ok: boolean; message?: string } => {
+    if (task.predecessorTaskId) {
+      // 完了以外のステータスにしようとしている場合
+      if (task.status !== Status.NOT_STARTED) {
+         const predecessor = tasks.find(t => t.id === task.predecessorTaskId);
+         if (predecessor && predecessor.status !== Status.COMPLETED) {
+             return { 
+                 ok: false, 
+                 message: `前提タスク「${predecessor.title}」がまだ完了していません。\n先に前提タスクを完了させてください。` 
+             };
+         }
+      }
+    }
+    return { ok: true };
+  };
+
   const handleSaveTask = async (taskData: Partial<Task>, addToCalendar: boolean) => {
+    // 依存関係チェック
+    const dependencyCheck = checkDependency(taskData);
+    if (!dependencyCheck.ok) {
+        alert(dependencyCheck.message);
+        return;
+    }
+
     try {
       setLoading(true);
       let savedTask: Task;
@@ -188,6 +212,17 @@ function App() {
   };
 
   const handleTaskMove = async (taskId: string, newStatus: Status) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // 依存関係チェック
+    const updatedTaskPreview = { ...task, status: newStatus };
+    const dependencyCheck = checkDependency(updatedTaskPreview);
+    if (!dependencyCheck.ok) {
+        alert(dependencyCheck.message);
+        return; // 移動をキャンセル
+    }
+
     try {
       // Optimistic update
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
@@ -455,6 +490,7 @@ function App() {
         categories={categories.map(c => c.name)}
         currentUser={currentUser}
         mode={modalMode}
+        allTasks={tasks} // Pass all tasks for searching predecessors
       />
     </div>
   );

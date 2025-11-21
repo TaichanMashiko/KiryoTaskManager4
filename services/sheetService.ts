@@ -182,7 +182,7 @@ export class SheetService {
 
       // Define headers for each sheet
       const headers: Record<string, string[]> = {
-        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility'],
+        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility', 'PredecessorTaskId'],
         [SHEET_NAMES.USERS]: ['ID', 'Email', 'Role', 'Department', 'Name'],
         [SHEET_NAMES.CATEGORIES]: ['ID', 'Name']
       };
@@ -314,7 +314,7 @@ export class SheetService {
   async getTasks(): Promise<Task[]> {
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A2:M`, // Expanded range to include CalendarEventId and Visibility
+      range: `${SHEET_NAMES.TASKS}!A2:N`, // Expanded range
     });
     const rows = res.result.values || [];
     return rows.map((row: string[]) => ({
@@ -331,6 +331,7 @@ export class SheetService {
       updatedAt: row[10],
       calendarEventId: row[11] || undefined,
       visibility: (row[12] as 'public' | 'private') || 'public',
+      predecessorTaskId: row[13] || undefined,
     }));
   }
 
@@ -359,6 +360,7 @@ export class SheetService {
       newTask.updatedAt,
       newTask.calendarEventId || '',
       newTask.visibility,
+      newTask.predecessorTaskId || '',
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.append({
@@ -395,11 +397,12 @@ export class SheetService {
       updatedTask.updatedAt,
       updatedTask.calendarEventId || '',
       updatedTask.visibility,
+      updatedTask.predecessorTaskId || '',
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A${rowIndex}:M${rowIndex}`,
+      range: `${SHEET_NAMES.TASKS}!A${rowIndex}:N${rowIndex}`,
       valueInputOption: 'USER_ENTERED',
       resource: { values: [row] }
     });
