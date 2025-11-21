@@ -177,6 +177,23 @@ function App() {
 
     try {
       setLoading(true);
+
+      // 新しいタグの自動登録
+      if (taskData.tag) {
+        const existingTag = tags.find(t => t.name === taskData.tag);
+        if (!existingTag) {
+            try {
+                // スプレッドシートに新しいタグを登録
+                const newTag = await sheetService.createTag(taskData.tag);
+                // ローカルのタグリストを即座に更新
+                setTags(prev => [...prev, newTag]);
+            } catch (e) {
+                console.error("Failed to create new tag", e);
+                // タグ登録に失敗してもタスク保存は続行する（色はデフォルトになる）
+            }
+        }
+      }
+
       let savedTask: Task;
 
       if (editingTask) {
@@ -196,9 +213,6 @@ function App() {
                   savedTask.calendarEventId = event.id;
                   await sheetService.updateTask(savedTask);
               }
-              
-              // Note: Alerting here might be annoying if modal already closed, but useful for confirmation
-              // alert("Googleカレンダーに予定を追加しました。"); 
           } catch (calendarError: any) {
               console.error("Calendar Error", calendarError);
               alert("タスクは保存されましたが、カレンダーへの追加に失敗しました。\n" + calendarError.message);
@@ -335,7 +349,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.6</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.7</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (

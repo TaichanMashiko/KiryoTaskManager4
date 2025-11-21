@@ -130,7 +130,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                   value={formData.tag || ''}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="タグを選択または入力"
+                  placeholder="タグを選択または新規入力"
                 />
                 <datalist id="tag-suggestions">
                   {tags.map((t) => (

@@ -12,6 +12,22 @@ declare global {
 
 const AUTH_STORAGE_KEY = 'kiryo_task_manager_auth';
 
+// Preset colors for new tags
+const PRESET_COLORS = [
+  '#EF4444', // Red
+  '#F97316', // Orange
+  '#F59E0B', // Amber
+  '#84CC16', // Lime
+  '#10B981', // Emerald
+  '#06B6D4', // Cyan
+  '#3B82F6', // Blue
+  '#6366F1', // Indigo
+  '#8B5CF6', // Violet
+  '#EC4899', // Pink
+  '#F43F5E', // Rose
+  '#64748B', // Slate
+];
+
 export class SheetService {
   private tokenClient: any;
   private gapiInited = false;
@@ -314,6 +330,29 @@ export class SheetService {
       name: row[1],
       color: row[2] || '#9CA3AF', // Default gray
     }));
+  }
+
+  async createTag(tagName: string): Promise<Tag> {
+    const id = 'tag_' + Math.random().toString(36).substr(2, 9);
+    // Pick a random nice color
+    const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+
+    const newTag: Tag = {
+        id,
+        name: tagName,
+        color
+    };
+
+    const row = [newTag.id, newTag.name, newTag.color];
+
+    await window.gapi.client.sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${SHEET_NAMES.TAGS}!A2`,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [row] }
+    });
+
+    return newTag;
   }
 
   async getTasks(): Promise<Task[]> {
