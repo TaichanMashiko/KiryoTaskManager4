@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Task, User, Tag, Priority, Status } from '../types';
 
 interface TaskModalProps {
@@ -22,10 +22,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
   const [predecessorSearch, setPredecessorSearch] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
+  // タグドロップダウン用の状態
+  const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
+
+  // タグドロップダウン外のクリック検知
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (tagDropdownRef.current && !tagDropdownRef.current.contains(event.target as Node)) {
+            setIsTagDropdownOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       setAddToCalendar(false); // Reset on open
       setPredecessorSearch('');
+      setIsTagDropdownOpen(false);
       if (task) {
         setFormData({ ...task });
       } else {
@@ -45,7 +61,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, task, mode]); // users, tags, currentUserの変更によるリセットを防ぐため、依存配列から除外
+  }, [isOpen, task, mode]); 
 
   if (!isOpen) return null;
 
@@ -59,6 +75,22 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
     onSave(formData, addToCalendar);
   };
 
+  // タグフィルタリングロジック
+  const currentTagInput = formData.tag || '';
+  let displayTags = tags;
+  
+  if (currentTagInput) {
+      const matches = tags.filter(t => t.name.toLowerCase().includes(currentTagInput.toLowerCase()));
+      // 入力値が既存タグと完全に一致する場合（選択済みの場合など）は、他の選択肢も見せるために全件表示にするか、
+      // あるいはフィルタした結果（その1件）だけを見せるか。
+      // ユーザー要望の「既存タグが表示されない」を解決するため、
+      // 完全一致が1件だけある場合は「切り替えたい」意図を汲んで全件表示（またはフィルタ解除）するのが親切だが、
+      // 一般的なComboboxの挙動としてはフィルタが正しい。
+      // ここでは「▼ボタン」で全件表示できるので、入力中はフィルタリングを優先する。
+      // ただし、一致するものがなければ「新規作成」を表示する。
+      displayTags = matches;
+  }
+
   // 前提タスク関連
   const predecessorTask = formData.predecessorTaskId 
     ? allTasks.find(t => t.id === formData.predecessorTaskId) 
@@ -66,14 +98,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
 
   const filteredPredecessorCandidates = allTasks
     .filter(t => {
-        // 自分自身は除外
         if (task && t.id === task.id) return false;
-        // 既に選択されているものは除外（表示上）
         if (t.id === formData.predecessorTaskId) return false;
-        // 検索クエリでフィルタ
         return t.title.toLowerCase().includes(predecessorSearch.toLowerCase());
     })
-    .slice(0, 5); // 上位5件のみ表示
+    .slice(0, 5); 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -122,21 +151,73 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                     </select>
                 )}
               </div>
-              <div>
+              
+              {/* タグ カスタムドロップダウン */}
+              <div className="relative" ref={tagDropdownRef}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">タグ</label>
-                <input
-                  list="tag-suggestions"
-                  name="tag"
-                  value={formData.tag || ''}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="タグを選択または新規入力"
-                />
-                <datalist id="tag-suggestions">
-                  {tags.map((t) => (
-                    <option key={t.id} value={t.name} />
-                  ))}
-                </datalist>
+                <div className="relative">
+                    <input
+                    name="tag"
+                    value={formData.tag || ''}
+                    onChange={(e) => {
+                        handleChange(e);
+                        setIsTagDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsTagDropdownOpen(true)}
+                    onClick={() => setIsTagDropdownOpen(true)}
+                    autoComplete="off"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none pr-8"
+                    placeholder="タグを選択または新規入力"
+                    />
+                    <div 
+                        className="absolute inset-y-0 right-0 flex items-center px-2 cursor-pointer text-gray-400 hover:text-gray-600"
+                        onClick={() => {
+                            setIsTagDropdownOpen(!isTagDropdownOpen);
+                            // Toggle click should focus input but logic handled by isOpen
+                        }}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                </div>
+
+                {isTagDropdownOpen && (
+                    <ul className="absolute z-20 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 ring-1 ring-black ring-opacity-5 overflow-auto text-sm">
+                        {/* もし入力があり、かつ一致するものがなければ新規作成オプションを表示 */}
+                        {currentTagInput && !tags.some(t => t.name === currentTagInput) && (
+                             <li 
+                                className="px-3 py-2 cursor-pointer hover:bg-indigo-50 text-indigo-600 font-medium border-b border-gray-100"
+                                onClick={() => {
+                                    setIsTagDropdownOpen(false);
+                                }}
+                            >
+                                "{currentTagInput}" を新規作成
+                            </li>
+                        )}
+
+                        {/* 入力が空の場合は全件表示、入力がある場合はフィルタ結果を表示 */}
+                        {(currentTagInput ? displayTags : tags).map((t) => (
+                            <li 
+                                key={t.id}
+                                className="px-3 py-2 cursor-pointer hover:bg-gray-100 flex items-center"
+                                onClick={() => {
+                                    setFormData(prev => ({ ...prev, tag: t.name }));
+                                    setIsTagDropdownOpen(false);
+                                }}
+                            >
+                                <span className="w-3 h-3 rounded-full mr-2 flex-shrink-0" style={{ backgroundColor: t.color }}></span>
+                                <span className="truncate">{t.name}</span>
+                            </li>
+                        ))}
+
+                        {(currentTagInput ? displayTags : tags).length === 0 && currentTagInput && tags.some(t => t.name === currentTagInput) && (
+                             <li className="px-3 py-2 text-gray-500 italic">一致するタグ選択済み</li>
+                        )}
+                        
+                        {tags.length === 0 && !currentTagInput && (
+                            <li className="px-3 py-2 text-gray-400 italic">登録済みタグがありません</li>
+                        )}
+                    </ul>
+                )}
               </div>
             </div>
 

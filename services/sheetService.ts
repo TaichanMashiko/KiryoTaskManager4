@@ -332,10 +332,21 @@ export class SheetService {
     }));
   }
 
-  async createTag(tagName: string): Promise<Tag> {
+  async createTag(tagName: string, existingTags: Tag[] = []): Promise<Tag> {
     const id = 'tag_' + Math.random().toString(36).substr(2, 9);
-    // Pick a random nice color
-    const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+    
+    // Determine color: try to find one that is not used yet
+    const usedColors = new Set(existingTags.map(t => t.color.toUpperCase()));
+    const availableColors = PRESET_COLORS.filter(c => !usedColors.has(c.toUpperCase()));
+
+    let color;
+    if (availableColors.length > 0) {
+        // Pick a random unused color
+        color = availableColors[Math.floor(Math.random() * availableColors.length)];
+    } else {
+        // If all presets are used, pick any random preset
+        color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+    }
 
     const newTag: Tag = {
         id,

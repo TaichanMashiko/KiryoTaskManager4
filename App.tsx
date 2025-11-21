@@ -183,13 +183,13 @@ function App() {
         const existingTag = tags.find(t => t.name === taskData.tag);
         if (!existingTag) {
             try {
-                // スプレッドシートに新しいタグを登録
-                const newTag = await sheetService.createTag(taskData.tag);
+                // スプレッドシートに新しいタグを登録 (既存のタグリストを渡して色重複を避ける)
+                const newTag = await sheetService.createTag(taskData.tag, tags);
                 // ローカルのタグリストを即座に更新
                 setTags(prev => [...prev, newTag]);
             } catch (e) {
                 console.error("Failed to create new tag", e);
-                // タグ登録に失敗してもタスク保存は続行する（色はデフォルトになる）
+                // タグ登録に失敗してもタスク保存は続行する
             }
         }
       }
