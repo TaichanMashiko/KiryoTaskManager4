@@ -44,7 +44,25 @@ function App() {
             }
         } catch (e: any) {
             console.error("Init failed", e);
-            setInitError(e?.message || JSON.stringify(e) || "Google APIの初期化に失敗しました。");
+            
+            let message = "Google APIの初期化に失敗しました。";
+            
+            // Better error parsing
+            try {
+                if (typeof e === 'string') {
+                    message = e;
+                } else if (e.result && e.result.error && e.result.error.message) {
+                    message = `API Error: ${e.result.error.message}`;
+                } else if (e.message) {
+                    message = e.message;
+                } else {
+                    message = "詳細: " + JSON.stringify(e);
+                }
+            } catch (parseError) {
+                message += " (エラー詳細の解析に失敗)";
+            }
+
+            setInitError(message + " (ヒント: コンソールを確認し、APIキー/クライアントID/有効なAPIを確認してください)");
         }
     };
     init();
@@ -55,7 +73,7 @@ function App() {
     if (!silent) setLoading(true);
     setAuthError(null);
     try {
-      // Ensure sheets exist (only need to do this once really, but safe to repeat)
+      // Ensure sheets exist
       if (!silent) await sheetService.initializeSheets();
 
       if (!currentUser) {
@@ -77,7 +95,7 @@ function App() {
       setTasks(taskList);
     } catch (error: any) {
       console.error("Failed to load data", error);
-      if (!silent) setAuthError("データの読み込みに失敗しました: " + (error?.result?.error?.message || error.message));
+      if (!silent) setAuthError("データの読み込みに失敗しました: " + (error?.result?.error?.message || error.message || "Unknown error"));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -94,7 +112,6 @@ function App() {
   useEffect(() => {
     if (!isSignedIn) return;
     const interval = setInterval(() => {
-        console.log("Polling for updates...");
         loadData(true); // Silent load
     }, 30000);
     return () => clearInterval(interval);
@@ -104,332 +121,308 @@ function App() {
       sheetService.signIn(false);
   };
 
-  // Extract unique departments from users
-  const departments = useMemo(() => {
-    const depts = new Set(users.map(u => u.department).filter(d => d)); // Filter out empty/undefined
-    return Array.from(depts);
-  }, [users]);
-
-  // Combine master categories and used categories from tasks for suggestions
-  const categorySuggestions = useMemo(() => {
-    const masterNames = categories.map(c => c.name);
-    const usedNames = tasks.map(t => t.category).filter(c => c); // Get categories from existing tasks
-    // Create unique set and sort
-    return Array.from(new Set([...masterNames, ...usedNames])).sort();
-  }, [categories, tasks]);
-
-  const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
-      const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            task.detail.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesAssignee = filterAssignee ? task.assigneeEmail === filterAssignee : true;
-      const matchesStatus = filterStatus ? task.status === filterStatus : true;
-      
-      // Department Filter Logic
-      const assignee = users.find(u => u.email === task.assigneeEmail);
-      const matchesDepartment = filterDepartment 
-        ? (assignee?.department === filterDepartment) 
-        : true;
-
-      return matchesSearch && matchesAssignee && matchesStatus && matchesDepartment;
+  const handleSignOut = () => {
+    sheetService.signOut(() => {
+      setIsSignedIn(false);
+      setTasks([]);
+      setCurrentUser(null);
     });
-  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, users]);
-
-  const handleCreateTask = () => {
-    setEditingTask(null);
-    setIsModalOpen(true);
   };
 
-  const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setIsModalOpen(true);
-  };
+  // --- Task Operations ---
 
-  const handleSaveTask = async (taskData: Partial<Task>) => {
-    setLoading(true);
+  const handleSaveTask = async (taskData: Partial<Task>, addToCalendar: boolean) => {
     try {
+      setLoading(true);
+      let savedTask: Task;
+
       if (editingTask) {
-        // Update
-        const updated = await sheetService.updateTask({ ...editingTask, ...taskData } as Task);
-        setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+        savedTask = await sheetService.updateTask({ ...editingTask, ...taskData } as Task);
       } else {
-        // Create
-        const created = await sheetService.createTask(taskData as any);
-        setTasks(prev => [...prev, created]);
+        savedTask = await sheetService.createTask(taskData as any);
       }
+
+      // Handle Calendar Integration
+      if (addToCalendar) {
+          try {
+              await sheetService.addToCalendar(savedTask);
+              alert("Googleカレンダーに予定を追加しました。");
+          } catch (calendarError: any) {
+              console.error("Calendar Error", calendarError);
+              alert("タスクは保存されましたが、カレンダーへの追加に失敗しました。\n" + calendarError.message);
+          }
+      }
+
+      await loadData(true);
       setIsModalOpen(false);
-    } catch (error) {
-      console.error("Save failed", error);
-      alert("保存に失敗しました。");
+      setEditingTask(null);
+    } catch (e: any) {
+      console.error(e);
+      alert("保存に失敗しました: " + e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDirectUpdate = async (updatedTask: Task) => {
-    // Update local state immediately for UI responsiveness
-    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-    
-    // Then sync with server
-    try {
-        await sheetService.updateTask(updatedTask);
-    } catch(e) {
-        console.error("Update failed", e);
-        alert("変更の保存に失敗しました。");
-        // Revert via reload or optimistic rollback (simple reload for now)
-        loadData(true); 
-    }
-  };
-
   const handleDeleteTask = async (taskId: string) => {
-    if (window.confirm("本当にこのタスクを削除しますか？")) {
+    if (!window.confirm("本当にこのタスクを削除しますか？")) return;
+    try {
       setLoading(true);
-      try {
-        await sheetService.deleteTask(taskId);
-        setTasks(prev => prev.filter(t => t.id !== taskId));
-      } catch (error) {
-        alert("削除に失敗しました。");
-      } finally {
-        setLoading(false);
-      }
+      await sheetService.deleteTask(taskId);
+      await loadData(true);
+    } catch (e: any) {
+      console.error(e);
+      alert("削除に失敗しました: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleTaskMove = async (taskId: string, newStatus: Status) => {
-    // Optimistic update
-    const oldTasks = [...tasks];
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
-    
     try {
+      // Optimistic update
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
       await sheetService.updateTaskStatus(taskId, newStatus);
-    } catch (error) {
-      // Revert if failed
-      setTasks(oldTasks);
-      alert("ステータス更新に失敗しました。");
+    } catch (e) {
+      console.error("Move failed", e);
+      loadData(true); // Revert on fail
     }
   };
 
-  // Init Error State
+  // --- Filtering ---
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            task.detail.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesAssignee = filterAssignee ? task.assigneeEmail === filterAssignee : true;
+      const matchesStatus = filterStatus ? task.status === filterStatus : true;
+
+      let matchesDepartment = true;
+      if (filterDepartment) {
+        const assignee = users.find(u => u.email === task.assigneeEmail);
+        matchesDepartment = assignee?.department === filterDepartment;
+      }
+
+      return matchesSearch && matchesAssignee && matchesStatus && matchesDepartment;
+    });
+  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, users]);
+
+  // --- UI Rendering ---
+
   if (initError) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full border-l-4 border-red-500">
-            <h1 className="text-xl font-bold text-red-600 mb-2">初期化エラー</h1>
-            <div className="bg-gray-100 p-3 rounded text-left text-xs font-mono text-gray-600 overflow-auto max-h-32 mb-4">
-              {initError}
-            </div>
-            <p className="text-sm text-gray-500">ページを再読み込みしてください。</p>
+      <div className="min-h-screen flex items-center justify-center bg-red-50 p-4">
+        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
+          <h2 className="text-red-600 text-xl font-bold mb-2">初期化エラー</h2>
+          <p className="text-gray-700 text-sm whitespace-pre-wrap break-words">{initError}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-4 w-full bg-red-100 text-red-700 py-2 px-4 rounded hover:bg-red-200 transition"
+          >
+            リロード
+          </button>
         </div>
       </div>
     );
   }
 
-  // Authentication Error State
-  if (authError) {
-     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full border-l-4 border-orange-500">
-            <h1 className="text-xl font-bold text-orange-600 mb-2">アクセス許可エラー</h1>
-            <p className="text-gray-700 mb-6">{authError}</p>
-            <button 
-                onClick={() => window.location.reload()}
-                className="text-indigo-600 hover:text-indigo-800 underline"
-            >
-                再読み込み
-            </button>
-        </div>
-      </div>
-     );
-  }
-
   if (!isInitialized) {
-     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <p className="text-gray-500 font-medium">システムを起動中...</p>
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
-     );
+    );
   }
 
   if (!isSignedIn) {
-      return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-            <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full">
-                <h1 className="text-2xl font-bold text-gray-800 mb-2">KiryoTaskManager</h1>
-                <p className="text-gray-600 mb-8">チームのタスクをGoogleスプレッドシートで管理します。</p>
-                <button 
-                    onClick={handleSignIn}
-                    className="w-full bg-white border border-gray-300 text-gray-700 font-semibold py-3 px-4 rounded-lg flex items-center justify-center hover:bg-gray-50 transition-colors shadow-sm"
-                >
-                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6 mr-3" alt="Google" />
-                    Googleアカウントでログイン
-                </button>
-            </div>
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Kiryo Task Manager</h1>
+          <p className="text-gray-500 mb-8">Googleスプレッドシートを使用したタスク管理アプリ</p>
+          <button
+            onClick={handleSignIn}
+            className="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg shadow-md transition-all transform hover:scale-[1.02]"
+          >
+            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
+            </svg>
+            Googleアカウントでログイン
+          </button>
         </div>
-      );
+      </div>
+    );
   }
 
-  // Main App
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-bold text-indigo-600 tracking-tight">KiryoTaskManager</h1>
-              <div className="hidden md:flex space-x-1 bg-gray-100 p-1 rounded-lg">
-                {[ViewMode.LIST, ViewMode.KANBAN, ViewMode.GANTT].map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                      viewMode === mode
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    {mode === ViewMode.LIST && 'リスト'}
-                    {mode === ViewMode.KANBAN && 'かんばん'}
-                    {mode === ViewMode.GANTT && 'ガント'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleCreateTask}
-                disabled={loading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center disabled:opacity-50"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                新規タスク
-              </button>
-              {currentUser && (
-                <div className="flex items-center gap-2 pl-4 border-l border-gray-200">
-                  <div className="text-right hidden sm:block">
-                    <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
-                    <p className="text-xs text-gray-500">{currentUser.role === 'admin' ? '管理者' : '一般'}</p>
-                  </div>
-                  {currentUser.avatarUrl ? (
-                      <img src={currentUser.avatarUrl} alt="profile" className="h-8 w-8 rounded-full bg-gray-200" />
-                  ) : (
-                    <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+      <header className="bg-white shadow-sm z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.0</span>
+          </div>
+          <div className="flex items-center space-x-4">
+            {currentUser && (
+                <div className="flex items-center text-sm text-gray-600 hidden sm:flex">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold mr-2">
                         {currentUser.name.charAt(0)}
                     </div>
-                  )}
+                    <span>{currentUser.name}</span>
                 </div>
-              )}
-            </div>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="text-sm text-gray-500 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition"
+            >
+              ログアウト
+            </button>
           </div>
         </div>
       </header>
-      
-       {/* Loading Indicator Overlay */}
-       {loading && (
-          <div className="fixed inset-0 bg-white bg-opacity-50 z-50 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
-       )}
 
-      {/* Filters & Toolbar */}
-      <div className="bg-white border-b border-gray-200 py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row gap-4 justify-between items-center">
-          <div className="relative flex-1 w-full sm:max-w-xs">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+      {/* Main Content */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col overflow-hidden">
+        
+        {/* Auth Error Message */}
+        {authError && (
+             <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded shadow-sm">
+                <div className="flex">
+                    <div className="ml-3">
+                        <p className="text-sm text-red-700">{authError}</p>
+                    </div>
+                </div>
             </div>
-            <input
-              type="text"
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              placeholder="キーワードで検索..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+        )}
+
+        {/* Controls Bar */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
           
-          <div className="flex gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
-            {/* Department Filter */}
-            {departments.length > 0 && (
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="block w-full flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600 sm:w-auto"
-              >
-                <option value="">全部署</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            )}
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 flex-1 w-full">
+            <div className="relative flex-grow max-w-xs">
+                <input
+                    type="text"
+                    placeholder="検索..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
 
             <select
               value={filterAssignee}
               onChange={(e) => setFilterAssignee(e.target.value)}
-              className="block w-full flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600 sm:w-auto"
+              className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
             >
-              <option value="">全担当者</option>
+              <option value="">全ての担当者</option>
               {users.map(u => (
                 <option key={u.email} value={u.email}>{u.name}</option>
               ))}
             </select>
-            
+
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="block w-full flex-shrink-0 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600 sm:w-auto"
+              className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
             >
-              <option value="">全ステータス</option>
+              <option value="">全てのステータス</option>
               {Object.values(Status).map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
-          {viewMode === ViewMode.LIST && (
-            <div className="h-full overflow-auto">
-              <TaskTable
-                tasks={filteredTasks}
-                users={users}
-                onEdit={handleEditTask}
-                onDelete={handleDeleteTask}
-              />
+          {/* View Switcher & Add Button */}
+          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+             <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button
+                    onClick={() => setViewMode(ViewMode.LIST)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.LIST ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                    リスト
+                </button>
+                <button
+                    onClick={() => setViewMode(ViewMode.KANBAN)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.KANBAN ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                    カンバン
+                </button>
+                <button
+                    onClick={() => setViewMode(ViewMode.GANTT)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.GANTT ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                >
+                    ガント
+                </button>
+             </div>
+
+             <button
+                onClick={() => { setEditingTask(null); setIsModalOpen(true); }}
+                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition-colors text-sm font-medium"
+             >
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                タスク作成
+             </button>
+          </div>
+        </div>
+
+        {/* View Content */}
+        <div className="flex-1 overflow-hidden relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white bg-opacity-50 z-10 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
             </div>
           )}
+
+          {viewMode === ViewMode.LIST && (
+            <TaskTable
+              tasks={filteredTasks}
+              users={users}
+              onEdit={(t) => { setEditingTask(t); setIsModalOpen(true); }}
+              onDelete={handleDeleteTask}
+            />
+          )}
+
           {viewMode === ViewMode.KANBAN && (
             <KanbanBoard
               tasks={filteredTasks}
               users={users}
               onTaskMove={handleTaskMove}
-              onEdit={handleEditTask}
+              onEdit={(t) => { setEditingTask(t); setIsModalOpen(true); }}
             />
           )}
+
           {viewMode === ViewMode.GANTT && (
              <GanttChart
                tasks={filteredTasks}
                users={users}
-               onEdit={handleEditTask}
-               onTaskUpdate={handleDirectUpdate}
+               onEdit={(t) => { setEditingTask(t); setIsModalOpen(true); }}
+               onTaskUpdate={async (updatedTask) => {
+                  // Immediate local update for smoothness
+                  setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+                  try {
+                      await sheetService.updateTask(updatedTask);
+                  } catch(e) {
+                      loadData(true);
+                  }
+               }}
              />
           )}
         </div>
       </main>
 
+      {/* Modals */}
       <TaskModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveTask}
         task={editingTask}
         users={users}
-        categories={categorySuggestions}
+        categories={categories.map(c => c.name)}
       />
     </div>
   );

@@ -3,6 +3,10 @@
 export const GOOGLE_CLIENT_ID = '1008158953225-0049gdts0shep5vjob7ffid21pg1k5kl.apps.googleusercontent.com';
 export const GOOGLE_API_KEY = 'AIzaSyAP01pTXo8mKPGUID407-gF7cE_EmX9ILY';
 
-// 必要なスコープ（スプレッドシートの読み書き権限 + ユーザー情報取得権限）
-export const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
-export const DISCOVERY_DOCS = ['https://sheets.googleapis.com/$discovery/rest?version=v4'];
+// 必要なスコープ（スプレッドシートの読み書き権限 + ユーザー情報取得権限 + カレンダー書き込み権限）
+export const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events';
+
+export const DISCOVERY_DOCS = [
+    'https://sheets.googleapis.com/$discovery/rest?version=v4',
+    'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'
+];

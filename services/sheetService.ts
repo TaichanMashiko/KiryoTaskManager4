@@ -443,6 +443,41 @@ export class SheetService {
     const sheet = spreadsheet.result.sheets.find((s: any) => s.properties.title === sheetTitle);
     return sheet ? sheet.properties.sheetId : 0;
   }
+
+  // --- Google Calendar Integration ---
+
+  async addToCalendar(task: Task): Promise<any> {
+    if (!task.startDate) throw new Error("開始日が設定されていません");
+    if (!task.dueDate) throw new Error("期限が設定されていません");
+
+    // Google Calendar All-day event end date is exclusive (the day after)
+    const endDateObj = new Date(task.dueDate);
+    endDateObj.setDate(endDateObj.getDate() + 1);
+    const endDateStr = endDateObj.toISOString().split('T')[0];
+
+    const event = {
+      summary: `[Kiryo] ${task.title}`,
+      description: `${task.detail}\n\n優先度: ${task.priority}\nステータス: ${task.status}`,
+      start: {
+        date: task.startDate, // YYYY-MM-DD for all-day
+      },
+      end: {
+        date: endDateStr,
+      },
+      transparency: 'transparent', // "Available" (doesn't block calendar)
+    };
+
+    try {
+      const response = await window.gapi.client.calendar.events.insert({
+        calendarId: 'primary',
+        resource: event,
+      });
+      return response.result;
+    } catch (e: any) {
+      console.error("Failed to add to calendar", e);
+      throw new Error("カレンダーへの追加に失敗しました。権限がないか、エラーが発生しました。");
+    }
+  }
 }
 
 export const sheetService = new SheetService();

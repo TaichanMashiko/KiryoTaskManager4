@@ -5,7 +5,7 @@ import { Task, User, Priority, Status } from '../types';
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (task: Partial<Task>) => void;
+  onSave: (task: Partial<Task>, addToCalendar: boolean) => void;
   task?: Task | null;
   users: User[];
   categories: string[];
@@ -13,9 +13,11 @@ interface TaskModalProps {
 
 export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, task, users, categories }) => {
   const [formData, setFormData] = useState<Partial<Task>>({});
+  const [addToCalendar, setAddToCalendar] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setAddToCalendar(false); // Reset on open
       if (task) {
         setFormData({ ...task });
       } else {
@@ -43,7 +45,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave(formData, addToCalendar);
   };
 
   return (
@@ -142,7 +144,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                 <label className="block text-sm font-medium text-gray-700 mb-1">優先度</label>
                 <select
                   name="priority"
-                  value={formData.priority}
+                  value={formData.priority || Priority.MEDIUM}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
@@ -155,7 +157,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                 <label className="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
                 <select
                   name="status"
-                  value={formData.status}
+                  value={formData.status || Status.NOT_STARTED}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
@@ -167,20 +169,35 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
             </div>
           </div>
 
-          <div className="flex-shrink-0 px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-            >
-              キャンセル
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-sm transition-colors"
-            >
-              保存
-            </button>
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center flex-shrink-0">
+            <div className="flex items-center">
+               <input
+                 id="calendar-check"
+                 type="checkbox"
+                 checked={addToCalendar}
+                 onChange={(e) => setAddToCalendar(e.target.checked)}
+                 className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+               />
+               <label htmlFor="calendar-check" className="ml-2 block text-sm text-gray-700 select-none cursor-pointer">
+                 Googleカレンダーに追加
+               </label>
+            </div>
+            
+            <div className="flex space-x-3">
+                <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                キャンセル
+                </button>
+                <button
+                type="submit"
+                className="px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                保存する
+                </button>
+            </div>
           </div>
         </form>
       </div>
