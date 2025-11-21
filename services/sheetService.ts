@@ -53,6 +53,7 @@ class SheetService {
               }
 
               // Token acquired, now we can check user info
+              // This ensures we have the email before checking the sheet
               await this.fetchUserInfo();
               onSignInUpdate(true);
             },
@@ -99,6 +100,7 @@ class SheetService {
   signIn(): void {
     if (this.tokenClient) {
       // Request permissions. If scopes changed, this triggers consent screen.
+      // 'prompt: consent' forces the consent screen to appear if scopes changed or first login
       this.tokenClient.requestAccessToken({ prompt: '' });
     }
   }
@@ -107,7 +109,10 @@ class SheetService {
   private async fetchUserInfo() {
     try {
       const tokenObj = window.gapi.client.getToken();
-      if (!tokenObj) return;
+      if (!tokenObj) {
+        console.warn("No token available for fetchUserInfo");
+        return;
+      }
 
       const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: {
@@ -116,6 +121,7 @@ class SheetService {
       });
       
       if (!response.ok) {
+          // 401 means token invalid or scopes missing
           throw new Error(`UserInfo fetch failed: ${response.status}`);
       }
 
@@ -214,8 +220,12 @@ class SheetService {
   // --- Data Access Methods ---
 
   async getCurrentUser(): Promise<User | null> {
+    // Ensure we have the user's email
     if (!this.currentUserEmail) await this.fetchUserInfo();
-    if (!this.currentUserEmail) return null;
+    if (!this.currentUserEmail) {
+        console.error("Cannot get current user: Email is missing.");
+        return null;
+    }
 
     const users = await this.getUsers();
     // Case-insensitive email check
@@ -223,14 +233,16 @@ class SheetService {
     
     // If user not found, AUTO-REGISTER them
     if (!user) {
-      console.log("User not found, auto-registering...");
+      console.log("User not found in sheet, auto-registering...");
       try {
         // Default values for new user
-        const newName = this.currentUserName || this.currentUserEmail;
+        const newName = this.currentUserName || this.currentUserEmail.split('@')[0];
         const newRole = '一般'; // Default role (maps to 'user' in frontend)
+        const newDept = ''; // Empty department initially
+        const newId = 'user_' + Math.random().toString(36).substr(2, 9);
         
         // Structure: 0:ID, 1:Email, 2:Role, 3:Department, 4:Name
-        const newRow = ['auto', this.currentUserEmail, newRole, '', newName];
+        const newRow = [newId, this.currentUserEmail, newRole, newDept, newName];
 
         await window.gapi.client.sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
@@ -244,10 +256,13 @@ class SheetService {
           email: this.currentUserEmail,
           name: newName,
           role: 'user',
+          department: newDept,
           avatarUrl: undefined
         };
+        console.log("Auto-registration successful");
       } catch (e) {
-        console.error("Failed to auto-register user", e);
+        console.error("Failed to auto-register user. Check spreadsheet permissions.", e);
+        // If auto-registration fails (e.g. read-only access), return null which triggers the auth error screen
         return null;
       }
     }
@@ -270,8 +285,9 @@ class SheetService {
       
       return {
         email: row[1] || '',
-        name: row[4] || row[1] || 'Unknown', // Name is now at index 4
+        name: row[4] || row[1] || 'Unknown', // Name is at index 4
         role: role,
+        department: row[3] || '', // Department is at index 3
         avatarUrl: undefined
       };
     }).filter((u: User) => u.email !== ''); // Filter out empty rows
