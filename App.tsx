@@ -4,6 +4,7 @@ import { TaskTable } from './components/TaskTable';
 import { KanbanBoard } from './components/KanbanBoard';
 import { GanttChart } from './components/GanttChart';
 import { TaskModal } from './components/TaskModal';
+import { AdminDashboard } from './components/AdminDashboard';
 import { sheetService } from './services/sheetService';
 import { Task, User, Category, ViewMode, Status } from './types';
 
@@ -317,7 +318,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.2</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.3</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
@@ -328,6 +329,21 @@ function App() {
                     <span>{currentUser.name}</span>
                 </div>
             )}
+            
+            {/* 管理者ボタン */}
+            {currentUser?.role === 'admin' && (
+               <button
+                  onClick={() => setViewMode(viewMode === ViewMode.ADMIN ? ViewMode.LIST : ViewMode.ADMIN)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${
+                      viewMode === ViewMode.ADMIN 
+                      ? 'bg-gray-800 text-white border-gray-800' 
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+               >
+                  {viewMode === ViewMode.ADMIN ? 'タスク画面へ戻る' : '管理者ダッシュボード'}
+               </button>
+            )}
+
             <button
               onClick={handleSignOut}
               className="text-sm text-gray-500 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition"
@@ -352,132 +368,141 @@ function App() {
             </div>
         )}
 
-        {/* Controls Bar */}
-        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-          
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3 flex-1 w-full">
-            <div className="relative flex-grow max-w-xs">
-                <input
-                    type="text"
-                    placeholder="検索..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        {/* Admin View Handling */}
+        {viewMode === ViewMode.ADMIN ? (
+            <div className="flex-1 overflow-auto">
+               <AdminDashboard tasks={tasks} users={users} />
             </div>
+        ) : (
+            <>
+                {/* Controls Bar (Visible only in standard modes) */}
+                <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                
+                {/* Filters */}
+                <div className="flex flex-wrap gap-3 flex-1 w-full">
+                    <div className="relative flex-grow max-w-xs">
+                        <input
+                            type="text"
+                            placeholder="検索..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
 
-            <select
-              value={filterAssignee}
-              onChange={(e) => setFilterAssignee(e.target.value)}
-              className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-            >
-              <option value="">全ての担当者</option>
-              {users.map(u => (
-                <option key={u.email} value={u.email}>{u.name}</option>
-              ))}
-            </select>
+                    <select
+                    value={filterAssignee}
+                    onChange={(e) => setFilterAssignee(e.target.value)}
+                    className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                    >
+                    <option value="">全ての担当者</option>
+                    {users.map(u => (
+                        <option key={u.email} value={u.email}>{u.name}</option>
+                    ))}
+                    </select>
 
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-            >
-              <option value="">全てのステータス</option>
-              {Object.values(Status).map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+                    <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                    >
+                    <option value="">全てのステータス</option>
+                    {Object.values(Status).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                    ))}
+                    </select>
+                </div>
 
-          {/* View Switcher & Add Button */}
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-             <div className="flex bg-gray-100 p-1 rounded-lg">
-                <button
-                    onClick={() => setViewMode(ViewMode.LIST)}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.LIST ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    リスト
-                </button>
-                <button
-                    onClick={() => setViewMode(ViewMode.KANBAN)}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.KANBAN ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    カンバン
-                </button>
-                <button
-                    onClick={() => setViewMode(ViewMode.GANTT)}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.GANTT ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                >
-                    ガント
-                </button>
-             </div>
+                {/* View Switcher & Add Button */}
+                <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                    <div className="flex bg-gray-100 p-1 rounded-lg">
+                        <button
+                            onClick={() => setViewMode(ViewMode.LIST)}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.LIST ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            リスト
+                        </button>
+                        <button
+                            onClick={() => setViewMode(ViewMode.KANBAN)}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.KANBAN ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            カンバン
+                        </button>
+                        <button
+                            onClick={() => setViewMode(ViewMode.GANTT)}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === ViewMode.GANTT ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            ガント
+                        </button>
+                    </div>
 
-             <div className="flex gap-2">
-                <button
-                    onClick={() => openModal('todo')}
-                    className="flex items-center px-3 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 shadow-sm transition-colors text-sm font-medium whitespace-nowrap"
-                >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    TODO作成
-                </button>
-                <button
-                    onClick={() => openModal('task')}
-                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition-colors text-sm font-medium whitespace-nowrap"
-                >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-                    タスク作成
-                </button>
-             </div>
-          </div>
-        </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => openModal('todo')}
+                            className="flex items-center px-3 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 shadow-sm transition-colors text-sm font-medium whitespace-nowrap"
+                        >
+                            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            TODO作成
+                        </button>
+                        <button
+                            onClick={() => openModal('task')}
+                            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 shadow-sm transition-colors text-sm font-medium whitespace-nowrap"
+                        >
+                            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                            タスク作成
+                        </button>
+                    </div>
+                </div>
+                </div>
 
-        {/* View Content */}
-        <div className="flex-1 overflow-hidden relative">
-          {loading && (
-            <div className="absolute inset-0 bg-white bg-opacity-50 z-10 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            </div>
-          )}
+                {/* View Content */}
+                <div className="flex-1 overflow-hidden relative">
+                {loading && (
+                    <div className="absolute inset-0 bg-white bg-opacity-50 z-10 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    </div>
+                )}
 
-          {viewMode === ViewMode.LIST && (
-            <TaskTable
-              tasks={filteredTasks}
-              users={users}
-              onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
-              onDelete={handleDeleteTask}
-            />
-          )}
+                {viewMode === ViewMode.LIST && (
+                    <TaskTable
+                    tasks={filteredTasks}
+                    users={users}
+                    onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
+                    onDelete={handleDeleteTask}
+                    />
+                )}
 
-          {viewMode === ViewMode.KANBAN && (
-            <KanbanBoard
-              tasks={filteredTasks}
-              users={users}
-              onTaskMove={handleTaskMove}
-              onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
-              onDelete={handleDeleteTask}
-            />
-          )}
+                {viewMode === ViewMode.KANBAN && (
+                    <KanbanBoard
+                    tasks={filteredTasks}
+                    users={users}
+                    onTaskMove={handleTaskMove}
+                    onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
+                    onDelete={handleDeleteTask}
+                    />
+                )}
 
-          {viewMode === ViewMode.GANTT && (
-             <GanttChart
-               tasks={filteredTasks}
-               users={users}
-               onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
-               onTaskUpdate={async (updatedTask) => {
-                  // Immediate local update for smoothness
-                  setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-                  try {
-                      await sheetService.updateTask(updatedTask);
-                  } catch(e) {
-                      loadData(true);
-                  }
-               }}
-               onDelete={handleDeleteTask}
-             />
-          )}
-        </div>
+                {viewMode === ViewMode.GANTT && (
+                    <GanttChart
+                    tasks={filteredTasks}
+                    users={users}
+                    onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
+                    onTaskUpdate={async (updatedTask) => {
+                        // Immediate local update for smoothness
+                        setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+                        try {
+                            await sheetService.updateTask(updatedTask);
+                        } catch(e) {
+                            loadData(true);
+                        }
+                    }}
+                    onDelete={handleDeleteTask}
+                    />
+                )}
+                </div>
+            </>
+        )}
       </main>
 
       {/* Modals */}

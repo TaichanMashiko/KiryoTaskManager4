@@ -15,6 +15,7 @@ export enum ViewMode {
   LIST = 'LIST',
   KANBAN = 'KANBAN',
   GANTT = 'GANTT',
+  ADMIN = 'ADMIN',
 }
 
 export interface User {
