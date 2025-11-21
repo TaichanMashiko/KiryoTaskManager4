@@ -1,17 +1,18 @@
 
 import React, { DragEvent, useState } from 'react';
-import { Task, User, Status, Priority } from '../types';
+import { Task, User, Tag, Status, Priority } from '../types';
 import { Badge } from './Badge';
 
 interface KanbanBoardProps {
   tasks: Task[];
   users: User[];
+  tags: Tag[];
   onTaskMove: (taskId: string, newStatus: Status) => void;
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMove, onEdit, onDelete }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, onTaskMove, onEdit, onDelete }) => {
   const statuses = Object.values(Status);
   const [isDragging, setIsDragging] = useState(false);
   const [isOverTrash, setIsOverTrash] = useState(false);
@@ -38,6 +39,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
   const getPredecessorName = (predecessorId: string) => {
     const task = tasks.find(t => t.id === predecessorId);
     return task ? task.title : '不明';
+  };
+
+  const getTagColor = (tagName: string) => {
+      const tag = tags.find(t => t.name === tagName);
+      return tag ? tag.color : '#9CA3AF';
   };
 
   const getHeaderStyles = (status: string) => {
@@ -190,6 +196,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
                         // Compact Card View
                         <div className="flex items-center justify-between">
                             <div className="flex items-center overflow-hidden mr-2">
+                                {/* Status/Priority Color Bar */}
                                 <div className={`flex-shrink-0 w-1.5 h-8 rounded-full mr-2 ${
                                     task.priority === Priority.HIGH ? 'bg-red-500' : 
                                     task.priority === Priority.MEDIUM ? 'bg-yellow-500' : 'bg-blue-500'
@@ -198,6 +205,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
                                     <div className="text-xs font-medium text-gray-800 truncate">{task.title}</div>
                                     <div className="text-[10px] text-gray-500 flex items-center">
                                          {task.visibility === 'private' && <span className="mr-1">🔒</span>}
+                                         {task.tag && (
+                                            <span 
+                                                className="inline-block w-2 h-2 rounded-full mr-1" 
+                                                style={{backgroundColor: getTagColor(task.tag)}} 
+                                                title={task.tag}
+                                            />
+                                         )}
                                          {getUserName(task.assigneeEmail)}
                                     </div>
                                 </div>
@@ -208,7 +222,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
                         // Full Card View
                         <>
                             <div className="flex justify-between items-start mb-2">
-                                <Badge type="priority" value={task.priority} />
+                                <div className="flex gap-1">
+                                    <Badge type="priority" value={task.priority} />
+                                    {task.tag && (
+                                        <span 
+                                            className="px-2 py-1 rounded-full text-xs font-medium text-white"
+                                            style={{ backgroundColor: getTagColor(task.tag) }}
+                                        >
+                                            {task.tag}
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="flex flex-col items-end">
                                     <span className="text-xs text-gray-400">{task.dueDate}まで</span>
                                     {task.visibility === 'private' && (

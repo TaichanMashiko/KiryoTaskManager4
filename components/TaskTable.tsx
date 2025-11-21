@@ -1,18 +1,19 @@
 
 import React, { useState } from 'react';
-import { Task, User } from '../types';
+import { Task, User, Tag } from '../types';
 import { Badge } from './Badge';
 
 interface TaskTableProps {
   tasks: Task[];
   users: User[];
+  tags: Tag[];
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
 type SortKey = keyof Task;
 
-export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDelete }) => {
+export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, tags, onEdit, onDelete }) => {
   const [sortKey, setSortKey] = useState<SortKey>('dueDate');
   const [isAsc, setIsAsc] = useState(true);
 
@@ -43,6 +44,11 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDe
       return task ? task.title : '不明なタスク';
   };
 
+  const getTagColor = (tagName: string) => {
+      const tag = tags.find(t => t.name === tagName);
+      return tag ? tag.color : '#9CA3AF'; // Default Gray
+  };
+
   const thClass = "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-50 transition-colors select-none";
 
   return (
@@ -53,6 +59,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDe
             <th className={thClass} onClick={() => handleSort('title')}>タスク名 {sortKey === 'title' && (isAsc ? '▲' : '▼')}</th>
             <th className={thClass} onClick={() => handleSort('status')}>ステータス {sortKey === 'status' && (isAsc ? '▲' : '▼')}</th>
             <th className={thClass} onClick={() => handleSort('priority')}>優先度 {sortKey === 'priority' && (isAsc ? '▲' : '▼')}</th>
+            <th className={thClass} onClick={() => handleSort('tag')}>タグ {sortKey === 'tag' && (isAsc ? '▲' : '▼')}</th>
             <th className={thClass} onClick={() => handleSort('assigneeEmail')}>担当者 {sortKey === 'assigneeEmail' && (isAsc ? '▲' : '▼')}</th>
             <th className={thClass} onClick={() => handleSort('startDate')}>開始日 {sortKey === 'startDate' && (isAsc ? '▲' : '▼')}</th>
             <th className={thClass} onClick={() => handleSort('dueDate')}>期限 {sortKey === 'dueDate' && (isAsc ? '▲' : '▼')}</th>
@@ -84,6 +91,16 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDe
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <Badge type="priority" value={task.priority} />
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                {task.tag && (
+                    <span 
+                        className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium text-white"
+                        style={{ backgroundColor: getTagColor(task.tag) }}
+                    >
+                        {task.tag}
+                    </span>
+                )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                 <div className="flex items-center">
@@ -117,7 +134,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, users, onEdit, onDe
           ))}
           {sortedTasks.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+              <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                 タスクが見つかりません
               </td>
             </tr>

@@ -1,5 +1,5 @@
 
-import { Task, User, Category, Status, Priority, SPREADSHEET_ID, SHEET_NAMES } from '../types';
+import { Task, User, Tag, Status, Priority, SPREADSHEET_ID, SHEET_NAMES } from '../types';
 import { GOOGLE_API_KEY, GOOGLE_CLIENT_ID, SCOPES, DISCOVERY_DOCS } from '../config';
 
 // Global types for Google API
@@ -182,9 +182,9 @@ export class SheetService {
 
       // Define headers for each sheet
       const headers: Record<string, string[]> = {
-        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Category', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility', 'PredecessorTaskId'],
+        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Tag', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility', 'PredecessorTaskId'],
         [SHEET_NAMES.USERS]: ['ID', 'Email', 'Role', 'Department', 'Name'],
-        [SHEET_NAMES.CATEGORIES]: ['ID', 'Name']
+        [SHEET_NAMES.TAGS]: ['ID', 'Name', 'Color']
       };
 
       // Create missing sheets
@@ -226,13 +226,17 @@ export class SheetService {
                 resource: { values: [['0001', this.currentUserEmail, '管理者', 'システム管理', this.currentUserName || 'Admin User']] }
              });
           }
-          if (name === SHEET_NAMES.CATEGORIES) {
+          if (name === SHEET_NAMES.TAGS) {
              await window.gapi.client.sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID,
-                range: `${SHEET_NAMES.CATEGORIES}!A2`,
+                range: `${SHEET_NAMES.TAGS}!A2`,
                 valueInputOption: 'USER_ENTERED',
                 resource: { values: [
-                    ['1', '教務'], ['2', '進路'], ['3', '生徒指導'], ['4', '総務'], ['5', '学年団']
+                    ['1', '教務', '#3B82F6'], 
+                    ['2', '進路', '#EC4899'], 
+                    ['3', '生徒指導', '#F59E0B'], 
+                    ['4', '総務', '#10B981'], 
+                    ['5', '学年団', '#6366F1']
                 ] }
              });
           }
@@ -299,15 +303,16 @@ export class SheetService {
     }));
   }
 
-  async getCategories(): Promise<Category[]> {
+  async getTags(): Promise<Tag[]> {
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.CATEGORIES}!A2:B`,
+      range: `${SHEET_NAMES.TAGS}!A2:C`,
     });
     const rows = res.result.values || [];
     return rows.map((row: string[]) => ({
       id: row[0],
       name: row[1],
+      color: row[2] || '#9CA3AF', // Default gray
     }));
   }
 
@@ -322,7 +327,7 @@ export class SheetService {
       title: row[1],
       detail: row[2],
       assigneeEmail: row[3],
-      category: row[4],
+      tag: row[4], // Was category
       startDate: row[5],
       dueDate: row[6],
       priority: row[7] as Priority,
@@ -351,7 +356,7 @@ export class SheetService {
       newTask.title,
       newTask.detail,
       newTask.assigneeEmail,
-      newTask.category,
+      newTask.tag,
       newTask.startDate,
       newTask.dueDate,
       newTask.priority,
@@ -388,7 +393,7 @@ export class SheetService {
       updatedTask.title,
       updatedTask.detail,
       updatedTask.assigneeEmail,
-      updatedTask.category,
+      updatedTask.tag,
       updatedTask.startDate,
       updatedTask.dueDate,
       updatedTask.priority,
@@ -476,7 +481,7 @@ export class SheetService {
 
     const event = {
       summary: `[Kiryo] ${task.title}`,
-      description: `${task.detail}\n\n優先度: ${task.priority}\nステータス: ${task.status}`,
+      description: `${task.detail}\n\nタグ: ${task.tag}\n優先度: ${task.priority}\nステータス: ${task.status}`,
       start: {
         date: task.startDate, // YYYY-MM-DD for all-day
       },

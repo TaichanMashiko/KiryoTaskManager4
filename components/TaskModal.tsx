@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Task, User, Priority, Status } from '../types';
+import { Task, User, Tag, Priority, Status } from '../types';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -8,13 +8,13 @@ interface TaskModalProps {
   onSave: (task: Partial<Task>, addToCalendar: boolean) => void;
   task?: Task | null;
   users: User[];
-  categories: string[];
+  tags: Tag[];
   currentUser?: User | null;
   mode: 'task' | 'todo'; // mode prop
   allTasks: Task[]; // 全タスクリスト（前提タスク検索用）
 }
 
-export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, task, users, categories, currentUser, mode, allTasks }) => {
+export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, task, users, tags, currentUser, mode, allTasks }) => {
   const [formData, setFormData] = useState<Partial<Task>>({});
   const [addToCalendar, setAddToCalendar] = useState(false);
   
@@ -34,7 +34,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
           title: '',
           detail: '',
           assigneeEmail: mode === 'todo' && currentUser ? currentUser.email : (users[0]?.email || ''),
-          category: categories[0] || '',
+          tag: tags[0]?.name || '',
           priority: Priority.MEDIUM,
           status: Status.NOT_STARTED,
           startDate: new Date().toISOString().split('T')[0],
@@ -44,7 +44,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
         });
       }
     }
-  }, [isOpen, task, users, categories, currentUser, mode]);
+  }, [isOpen, task, users, tags, currentUser, mode]);
 
   if (!isOpen) return null;
 
@@ -122,18 +122,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">カテゴリ</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">タグ</label>
                 <input
-                  list="category-suggestions"
-                  name="category"
-                  value={formData.category || ''}
+                  list="tag-suggestions"
+                  name="tag"
+                  value={formData.tag || ''}
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="カテゴリを入力"
+                  placeholder="タグを選択または入力"
                 />
-                <datalist id="category-suggestions">
-                  {categories.map((c, index) => (
-                    <option key={index} value={c} />
+                <datalist id="tag-suggestions">
+                  {tags.map((t) => (
+                    <option key={t.id} value={t.name} />
                   ))}
                 </datalist>
               </div>

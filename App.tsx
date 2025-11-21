@@ -6,7 +6,7 @@ import { GanttChart } from './components/GanttChart';
 import { TaskModal } from './components/TaskModal';
 import { Dashboard } from './components/AdminDashboard';
 import { sheetService } from './services/sheetService';
-import { Task, User, Category, ViewMode, Status } from './types';
+import { Task, User, Tag, ViewMode, Status } from './types';
 
 function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
@@ -16,7 +16,7 @@ function App() {
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
@@ -30,6 +30,7 @@ function App() {
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterTag, setFilterTag] = useState('');
   
   // 初回ロード時に自分のフィルタを適用したかどうかを管理
   const [hasSetInitialFilter, setHasSetInitialFilter] = useState(false);
@@ -90,13 +91,13 @@ function App() {
           setCurrentUser(userData);
       }
 
-      const [userList, catList, taskList] = await Promise.all([
+      const [userList, tagList, taskList] = await Promise.all([
         sheetService.getUsers(),
-        sheetService.getCategories(),
+        sheetService.getTags(),
         sheetService.getTasks(),
       ]);
       setUsers(userList);
-      setCategories(catList);
+      setTags(tagList);
       setTasks(taskList);
     } catch (error: any) {
       console.error("Failed to load data", error);
@@ -265,6 +266,7 @@ function App() {
       
       const matchesAssignee = filterAssignee ? task.assigneeEmail === filterAssignee : true;
       const matchesStatus = filterStatus ? task.status === filterStatus : true;
+      const matchesTag = filterTag ? task.tag === filterTag : true;
 
       let matchesDepartment = true;
       if (filterDepartment) {
@@ -272,9 +274,9 @@ function App() {
         matchesDepartment = assignee?.department === filterDepartment;
       }
 
-      return matchesSearch && matchesAssignee && matchesStatus && matchesDepartment;
+      return matchesSearch && matchesAssignee && matchesStatus && matchesTag && matchesDepartment;
     });
-  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, users, currentUser]);
+  }, [tasks, searchQuery, filterAssignee, filterStatus, filterDepartment, filterTag, users, currentUser]);
 
   // --- UI Rendering ---
 
@@ -330,7 +332,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.5</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.6</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
@@ -422,6 +424,17 @@ function App() {
                         <option key={s} value={s}>{s}</option>
                     ))}
                     </select>
+                    
+                    <select
+                    value={filterTag}
+                    onChange={(e) => setFilterTag(e.target.value)}
+                    className="border border-gray-300 rounded-md text-sm py-2 px-3 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                    >
+                    <option value="">全てのタグ</option>
+                    {tags.map(t => (
+                        <option key={t.id} value={t.name}>{t.name}</option>
+                    ))}
+                    </select>
                 </div>
 
                 {/* View Switcher & Add Button */}
@@ -478,6 +491,7 @@ function App() {
                     <TaskTable
                     tasks={filteredTasks}
                     users={users}
+                    tags={tags}
                     onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
                     onDelete={handleDeleteTask}
                     />
@@ -487,6 +501,7 @@ function App() {
                     <KanbanBoard
                     tasks={filteredTasks}
                     users={users}
+                    tags={tags}
                     onTaskMove={handleTaskMove}
                     onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
                     onDelete={handleDeleteTask}
@@ -497,6 +512,7 @@ function App() {
                     <GanttChart
                     tasks={filteredTasks}
                     users={users}
+                    tags={tags}
                     onEdit={(t) => openModal(t.visibility === 'private' ? 'todo' : 'task', t)}
                     onTaskUpdate={async (updatedTask) => {
                         // Immediate local update for smoothness
@@ -522,7 +538,7 @@ function App() {
         onSave={handleSaveTask}
         task={editingTask}
         users={users}
-        categories={categories.map(c => c.name)}
+        tags={tags}
         currentUser={currentUser}
         mode={modalMode}
         allTasks={tasks} // Pass all tasks for searching predecessors

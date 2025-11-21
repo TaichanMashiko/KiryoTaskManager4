@@ -1,10 +1,11 @@
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { Task, User, Status } from '../types';
+import { Task, User, Tag, Status } from '../types';
 
 interface GanttChartProps {
   tasks: Task[];
   users: User[];
+  tags: Tag[];
   onEdit: (task: Task) => void;
   onTaskUpdate?: (task: Task) => void;
   onDelete: (taskId: string) => void;
@@ -18,7 +19,7 @@ interface DragState {
   originalEnd: Date;
 }
 
-export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, onTaskUpdate, onDelete }) => {
+export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEdit, onTaskUpdate, onDelete }) => {
   const colWidth = 40; // Width of one day column in pixels
   const headerHeight = 48;
   const rowHeight = 48;
@@ -74,6 +75,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
 
   // 1. Filter valid tasks (must have dates)
   // 2. Sort tasks topologically so connected tasks are adjacent
+  // Note: If user wants to sort by tag, we could adjust this, but dependency sorting is critical for Gantt flow.
   const sortedValidTasks = useMemo(() => {
       const validTasks = tasks.filter(t => t.startDate && t.dueDate);
       
@@ -133,13 +135,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
     return user ? user.name.charAt(0) : '?';
   };
 
-  const getStatusColor = (status: Status) => {
-    switch (status) {
-      case Status.COMPLETED: return 'bg-green-500 hover:bg-green-600';
-      case Status.IN_PROGRESS: return 'bg-indigo-500 hover:bg-indigo-600';
-      case Status.NOT_STARTED: return 'bg-gray-400 hover:bg-gray-500';
-      default: return 'bg-blue-500';
-    }
+  const getTagColor = (tagName: string) => {
+    const tag = tags.find(t => t.name === tagName);
+    return tag ? tag.color : '#9CA3AF';
   };
 
   const formatDate = (date: Date) => {
@@ -349,6 +347,13 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
 
               if (width < colWidth) width = colWidth; // Minimum 1 day visual
 
+              // Colors & Opacity based on status/tag
+              const barColor = getTagColor(task.tag);
+              const isCompleted = task.status === Status.COMPLETED;
+              const isNotStarted = task.status === Status.NOT_STARTED;
+              
+              const barOpacity = isNotStarted ? 0.6 : 1;
+
               return (
                 <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 transition-colors relative z-10 group" style={{ height: rowHeight }}>
                   {/* Sticky Task Name */}
@@ -376,13 +381,19 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                   {/* Timeline Area for this row */}
                   <div className="relative flex-1">
                     <div
-                      className={`absolute top-2 h-8 rounded-md shadow-sm flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden ${getStatusColor(task.status)}`}
+                      className="absolute top-2 h-8 rounded-md shadow-sm flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden transition-all"
                       style={{ 
                         left: `${left}px`, 
                         width: `${width}px`,
-                        cursor: 'move'
+                        cursor: 'move',
+                        backgroundColor: barColor,
+                        opacity: barOpacity,
+                        // Add striped pattern for NOT_STARTED if desired (using CSS gradient)
+                        backgroundImage: isNotStarted ? 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)' : 'none',
+                        backgroundSize: '1rem 1rem'
                       }}
                       onMouseDown={(e) => handleMouseDown(e, task.id, 'move', task)}
+                      title={`タグ: ${task.tag}, ステータス: ${task.status}`}
                     >
                        {/* Drag Handle Left */}
                        <div 
@@ -390,9 +401,15 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
                            onMouseDown={(e) => handleMouseDown(e, task.id, 'left', task)}
                        />
                        
-                       {/* Content Area */}
-                       <div className="flex-1 h-full flex items-center overflow-hidden pl-2 pointer-events-none">
-                           {task.title}
+                       {/* Content Area: Icons for Status */}
+                       <div className="flex-1 h-full flex items-center overflow-hidden pl-2 pointer-events-none relative z-10">
+                           {isCompleted && (
+                               <svg className="w-4 h-4 mr-1 text-white/90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                           )}
+                           {isNotStarted && (
+                               <svg className="w-3 h-3 mr-1 text-white/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                           )}
+                           <span className="truncate font-medium drop-shadow-md">{task.title}</span>
                        </div>
 
                        {/* Drag Handle Right */}
@@ -413,6 +430,25 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, onEdit, on
             )}
           </div>
         </div>
+      </div>
+      
+      {/* Legend */}
+      <div className="bg-gray-50 p-2 border-t border-gray-200 flex items-center gap-4 text-xs text-gray-600 overflow-x-auto">
+          <div className="font-bold">凡例:</div>
+          <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1"><svg className="w-4 h-4 bg-gray-400 rounded text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg> 完了</div>
+              <div className="flex items-center gap-1"><div className="w-4 h-4 bg-gray-400 rounded"></div> 進行中</div>
+              <div className="flex items-center gap-1"><div className="w-4 h-4 bg-gray-400/60 rounded flex items-center justify-center text-white"><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div> 未着手</div>
+          </div>
+          <div className="h-4 border-l border-gray-300 mx-2"></div>
+          <div className="flex items-center gap-2">
+              {tags.map(tag => (
+                  <div key={tag.id} className="flex items-center gap-1">
+                      <div className="w-3 h-3 rounded-full" style={{backgroundColor: tag.color}}></div>
+                      {tag.name}
+                  </div>
+              ))}
+          </div>
       </div>
     </div>
   );

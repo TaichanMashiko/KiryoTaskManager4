@@ -1,5 +1,5 @@
 
-import { Task, User, Category, Status, Priority } from './types';
+import { Task, User, Tag, Status, Priority } from './types';
 
 export const MOCK_USERS: User[] = [
   { email: 'demo@kiryo.com', name: '山田 太郎', role: 'admin', department: '教務部', avatarUrl: 'https://picsum.photos/32/32?random=1' },
@@ -7,11 +7,11 @@ export const MOCK_USERS: User[] = [
   { email: 'tanaka@kiryo.com', name: '田中 次郎', role: 'user', department: '第1学年', avatarUrl: 'https://picsum.photos/32/32?random=3' },
 ];
 
-export const MOCK_CATEGORIES: Category[] = [
-  { id: 'c1', name: '開発' },
-  { id: 'c2', name: 'デザイン' },
-  { id: 'c3', name: 'マーケティング' },
-  { id: 'c4', name: '事務' },
+export const MOCK_TAGS: Tag[] = [
+  { id: 'tag1', name: '開発', color: '#3B82F6' }, // Blue
+  { id: 'tag2', name: 'デザイン', color: '#EC4899' }, // Pink
+  { id: 'tag3', name: 'マーケティング', color: '#F59E0B' }, // Amber
+  { id: 'tag4', name: '事務', color: '#10B981' }, // Emerald
 ];
 
 export const MOCK_TASKS: Task[] = [
@@ -20,7 +20,7 @@ export const MOCK_TASKS: Task[] = [
     title: '要件定義書の作成',
     detail: 'クライアントへのヒアリング結果をまとめる',
     assigneeEmail: 'demo@kiryo.com',
-    category: '開発',
+    tag: '開発',
     startDate: '2023-10-01',
     dueDate: '2023-10-05',
     priority: Priority.HIGH,
@@ -34,7 +34,7 @@ export const MOCK_TASKS: Task[] = [
     title: 'UIデザイン作成',
     detail: 'Figmaでトップページのデザインを作成する',
     assigneeEmail: 'suzuki@kiryo.com',
-    category: 'デザイン',
+    tag: 'デザイン',
     startDate: '2023-10-06',
     dueDate: '2023-10-15',
     priority: Priority.MEDIUM,
@@ -49,7 +49,7 @@ export const MOCK_TASKS: Task[] = [
     title: 'フロントエンド実装',
     detail: 'ReactとTailwindでのコーディング',
     assigneeEmail: 'demo@kiryo.com',
-    category: '開発',
+    tag: '開発',
     startDate: '2023-10-16',
     dueDate: '2023-10-30',
     priority: Priority.HIGH,
@@ -64,7 +64,7 @@ export const MOCK_TASKS: Task[] = [
     title: '週次定例ミーティング',
     detail: '進捗確認と課題の共有',
     assigneeEmail: 'tanaka@kiryo.com',
-    category: '事務',
+    tag: '事務',
     startDate: '2023-10-20',
     dueDate: '2023-10-20',
     priority: Priority.LOW,
