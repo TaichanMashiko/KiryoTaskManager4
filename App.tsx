@@ -317,7 +317,7 @@ function App() {
                 onChange={(e) => setFilterDepartment(e.target.value)}
                 className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
               >
-                <option value="">部署: 全て</option>
+                <option value="">全部署</option>
                 {departments.map(dept => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
@@ -329,7 +329,7 @@ function App() {
               onChange={(e) => setFilterAssignee(e.target.value)}
               className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
             >
-              <option value="">担当者: 全て</option>
+              <option value="">全担当者</option>
               {users.map(u => (
                 <option key={u.email} value={u.email}>{u.name}</option>
               ))}
@@ -340,7 +340,7 @@ function App() {
               onChange={(e) => setFilterStatus(e.target.value)}
               className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-gray-600"
             >
-              <option value="">ステータス: 全て</option>
+              <option value="">全ステータス</option>
               {Object.values(Status).map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}

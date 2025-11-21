@@ -19,6 +19,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
   };
 
   const getHeaderStyles = (status: string) => {
+    // Explicitly match the string values from the Enum
     switch (status) {
       case Status.COMPLETED:
         return {
@@ -32,8 +33,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, onTaskMo
         };
       case Status.NOT_STARTED:
         return {
-          container: 'bg-gray-400 text-white border-gray-500',
-          badge: 'bg-white text-gray-600'
+          container: 'bg-gray-500 text-white border-gray-600', // Used 500 for better contrast than Gantt's 400
+          badge: 'bg-white text-gray-700'
         };
       default:
         return {
