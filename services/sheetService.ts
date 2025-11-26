@@ -34,6 +34,10 @@ export class SheetService {
   private gisInited = false;
   private currentUserEmail: string = '';
   private currentUserName: string = '';
+  
+  // Token expiration management
+  private tokenExpiresAt: number = 0;
+  private refreshResolver: ((value: void | PromiseLike<void>) => void) | null = null;
 
   // Initialize the Google API Client
   async initClient(onSignInUpdate: (isSignedIn: boolean) => void): Promise<void> {
@@ -66,6 +70,11 @@ export class SheetService {
                 if (resp.error === 'interaction_required' || resp.error === 'login_required') {
                     console.log("Silent login failed, manual login required.");
                     localStorage.removeItem(AUTH_STORAGE_KEY);
+                    // Resolve waiting promise if exists (to prevent hanging)
+                    if (this.refreshResolver) {
+                        this.refreshResolver();
+                        this.refreshResolver = null;
+                    }
                     return;
                 }
                 throw resp;
@@ -73,13 +82,26 @@ export class SheetService {
               // IMPORTANT: Set the token for gapi client to use in subsequent requests
               const token = resp.access_token;
               if (token) {
+                // Set expiration time (expires_in is in seconds) - buffer 5 mins (300000ms)
+                const expiresInSeconds = Number(resp.expires_in);
+                this.tokenExpiresAt = Date.now() + (expiresInSeconds * 1000) - 300000;
+
                 window.gapi.client.setToken(resp);
                 // Save auth state
                 localStorage.setItem(AUTH_STORAGE_KEY, 'true');
               }
 
+              // Resolve any pending refresh promise
+              if (this.refreshResolver) {
+                  this.refreshResolver();
+                  this.refreshResolver = null;
+              }
+
               // Token acquired, now we can check user info
-              await this.fetchUserInfo();
+              // We only fetch user info if we haven't already, or if this was an explicit login
+              if (!this.currentUserEmail) {
+                  await this.fetchUserInfo();
+              }
               onSignInUpdate(true);
             },
           });
@@ -121,6 +143,36 @@ export class SheetService {
     });
   }
 
+  // Ensure we have a valid token before making requests
+  private async ensureAuth(): Promise<void> {
+      // If token is missing or expired
+      if (!window.gapi.client.getToken() || Date.now() >= this.tokenExpiresAt) {
+          console.log("Token expired or missing, attempting silent refresh...");
+          
+          // If a refresh is already in progress, join the queue
+          if (this.refreshResolver) {
+              return new Promise((resolve) => {
+                  const originalResolver = this.refreshResolver;
+                  this.refreshResolver = () => {
+                      if (originalResolver) originalResolver();
+                      resolve();
+                  };
+              });
+          }
+
+          return new Promise((resolve) => {
+              this.refreshResolver = resolve;
+              // Trigger silent refresh
+              if (this.tokenClient) {
+                this.tokenClient.requestAccessToken({ prompt: 'none' });
+              } else {
+                  // Fallback if client not init (shouldn't happen in normal flow)
+                  resolve(); 
+              }
+          });
+      }
+  }
+
   // Prompt user to sign in
   // Added 'silent' parameter to allow checking session without popup
   signIn(silent: boolean = false): void {
@@ -146,10 +198,12 @@ export class SheetService {
         localStorage.removeItem(AUTH_STORAGE_KEY);
         this.currentUserEmail = '';
         this.currentUserName = '';
+        this.tokenExpiresAt = 0;
         onSignOut();
       });
     } else {
         localStorage.removeItem(AUTH_STORAGE_KEY);
+        this.tokenExpiresAt = 0;
         onSignOut();
     }
   }
@@ -187,6 +241,7 @@ export class SheetService {
 
   // Setup initial sheets and headers if they don't exist
   async initializeSheets(): Promise<void> {
+    await this.ensureAuth();
     try {
       const spreadsheet = await window.gapi.client.sheets.spreadsheets.get({
         spreadsheetId: SPREADSHEET_ID,
@@ -268,6 +323,7 @@ export class SheetService {
   // --- Data Access Methods ---
 
   async getCurrentUser(): Promise<User | null> {
+    await this.ensureAuth();
     if (!this.currentUserEmail) await this.fetchUserInfo();
     if (!this.currentUserEmail) return null;
 
@@ -306,6 +362,7 @@ export class SheetService {
   }
 
   async getUsers(): Promise<User[]> {
+    await this.ensureAuth();
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.USERS}!A2:E`,
@@ -320,6 +377,7 @@ export class SheetService {
   }
 
   async getTags(): Promise<Tag[]> {
+    await this.ensureAuth();
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TAGS}!A2:C`,
@@ -333,6 +391,7 @@ export class SheetService {
   }
 
   async createTag(tagName: string, existingTags: Tag[] = []): Promise<Tag> {
+    await this.ensureAuth();
     const id = 'tag_' + Math.random().toString(36).substr(2, 9);
     
     // Determine color: try to find one that is not used yet
@@ -370,6 +429,7 @@ export class SheetService {
   }
 
   async getTasks(): Promise<Task[]> {
+    await this.ensureAuth();
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TASKS}!A2:N`, // Expanded range
@@ -394,6 +454,7 @@ export class SheetService {
   }
 
   async createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
+    await this.ensureAuth();
     const id = 'task_' + Math.random().toString(36).substr(2, 9);
     const now = new Date().toISOString();
     const newTask: Task = {
@@ -432,6 +493,7 @@ export class SheetService {
   }
 
   async updateTask(task: Task): Promise<Task> {
+    await this.ensureAuth();
     const tasks = await this.getTasks();
     const index = tasks.findIndex(t => t.id === task.id);
     if (index === -1) throw new Error('Task not found');
@@ -469,6 +531,9 @@ export class SheetService {
   }
 
   async updateTaskStatus(taskId: string, status: Status): Promise<void> {
+    // getTasks calls ensureAuth, so we don't strictly need it here if we use this.getTasks()
+    // but better to be safe if implementation changes
+    await this.ensureAuth(); 
     const tasks = await this.getTasks();
     const index = tasks.findIndex(t => t.id === taskId);
     if (index === -1) throw new Error('Task not found');
@@ -478,6 +543,7 @@ export class SheetService {
   }
 
   async deleteTask(taskId: string): Promise<void> {
+    await this.ensureAuth();
     const tasks = await this.getTasks();
     const index = tasks.findIndex(t => t.id === taskId);
     if (index === -1) throw new Error('Task not found');
@@ -514,6 +580,7 @@ export class SheetService {
   }
 
   private async getSheetId(sheetTitle: string): Promise<number> {
+    await this.ensureAuth();
     const spreadsheet = await window.gapi.client.sheets.spreadsheets.get({
       spreadsheetId: SPREADSHEET_ID,
     });
@@ -524,6 +591,7 @@ export class SheetService {
   // --- Google Calendar Integration ---
 
   async addToCalendar(task: Task): Promise<any> {
+    await this.ensureAuth();
     if (!task.startDate) throw new Error("開始日が設定されていません");
     if (!task.dueDate) throw new Error("期限が設定されていません");
 
@@ -557,6 +625,7 @@ export class SheetService {
   }
 
   async removeFromCalendar(eventId: string): Promise<void> {
+    await this.ensureAuth();
     try {
       await window.gapi.client.calendar.events.delete({
         calendarId: 'primary',
