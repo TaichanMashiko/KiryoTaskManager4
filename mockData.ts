@@ -28,6 +28,7 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-09-28T09:00:00Z',
     updatedAt: '2023-10-05T14:00:00Z',
     visibility: 'public',
+    order: 0,
   },
   {
     id: 't2',
@@ -43,6 +44,7 @@ export const MOCK_TASKS: Task[] = [
     updatedAt: '2023-10-06T09:30:00Z',
     visibility: 'public',
     predecessorTaskId: 't1',
+    order: 1,
   },
   {
     id: 't3',
@@ -58,6 +60,7 @@ export const MOCK_TASKS: Task[] = [
     updatedAt: '2023-10-05T11:00:00Z',
     visibility: 'public',
     predecessorTaskId: 't2',
+    order: 2,
   },
   {
     id: 't4',
@@ -72,5 +75,6 @@ export const MOCK_TASKS: Task[] = [
     createdAt: '2023-10-10T15:00:00Z',
     updatedAt: '2023-10-10T15:00:00Z',
     visibility: 'public',
+    order: 3,
   },
 ];

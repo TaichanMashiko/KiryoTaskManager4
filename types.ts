@@ -41,6 +41,7 @@ export interface Task {
   calendarEventId?: string; // Google Calendar Event ID
   visibility: 'public' | 'private'; // public: task, private: personal todo
   predecessorTaskId?: string; // 前提タスクのID
+  order?: number; // 並び順
 }
 
 export interface Tag {

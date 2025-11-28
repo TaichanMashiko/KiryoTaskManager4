@@ -8,14 +8,16 @@ interface KanbanBoardProps {
   users: User[];
   tags: Tag[];
   onTaskMove: (taskId: string, newStatus: Status) => void;
+  onTaskReorder?: (taskId: string, newStatus: Status, newIndex: number) => void; // Added prop
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, onTaskMove, onEdit, onDelete }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, onTaskMove, onTaskReorder, onEdit, onDelete }) => {
   const statuses = Object.values(Status);
   const [isDragging, setIsDragging] = useState(false);
   const [isOverTrash, setIsOverTrash] = useState(false);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null); // Track pulled task
   
   // Display Options
   const [isCompact, setIsCompact] = useState(false);
@@ -75,22 +77,44 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
     e.dataTransfer.setData('taskId', taskId);
     e.dataTransfer.effectAllowed = 'move';
     setIsDragging(true);
+    setDraggedTaskId(taskId);
   };
 
   const onDragEnd = () => {
     setIsDragging(false);
     setIsOverTrash(false);
+    setDraggedTaskId(null);
   };
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
   };
 
-  const onDrop = (e: DragEvent<HTMLDivElement>, status: Status) => {
+  // Drop on Column (Append to end or change status)
+  const onColumnDrop = (e: DragEvent<HTMLDivElement>, status: Status, statusTasksCount: number) => {
+    e.preventDefault();
     const taskId = e.dataTransfer.getData('taskId');
-    if (taskId) {
-      onTaskMove(taskId, status);
+    if (!taskId) return;
+
+    // If dropping on the column background (not on a card), we append to the end
+    if (onTaskReorder) {
+        onTaskReorder(taskId, status, statusTasksCount);
+    } else {
+        onTaskMove(taskId, status);
     }
+  };
+
+  // Drop on Card (Insert before)
+  const onCardDrop = (e: DragEvent<HTMLDivElement>, targetTask: Task, index: number) => {
+      e.preventDefault();
+      e.stopPropagation(); // Stop bubbling to column drop
+      const draggedId = e.dataTransfer.getData('taskId');
+      
+      if (draggedId === targetTask.id) return; // Dropped on self
+
+      if (onTaskReorder && draggedId) {
+          onTaskReorder(draggedId, targetTask.status, index);
+      }
   };
 
   const onTrashDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -134,7 +158,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
 
         <div className="flex gap-4 h-full overflow-x-auto pb-4 relative">
         {statuses.map((status) => {
-            const statusTasks = tasks.filter(t => t.status === status);
+            // Sort tasks by order before rendering
+            const statusTasks = tasks.filter(t => t.status === status).sort((a, b) => (a.order || 0) - (b.order || 0));
             const styles = getHeaderStyles(status);
             const isCollapsed = collapsedColumns.has(status);
             
@@ -163,7 +188,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 key={status}
                 className="flex-shrink-0 w-80 bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)]"
                 onDragOver={onDragOver}
-                onDrop={(e) => onDrop(e, status)}
+                onDrop={(e) => onColumnDrop(e, status, statusTasks.length)}
             >
                 <div className={`p-3 font-bold flex justify-between items-center rounded-t-lg border-b ${styles.container}`}>
                 <div className="flex items-center">
@@ -181,20 +206,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 </div>
                 
                 <div className="p-2 flex-1 overflow-y-auto space-y-2 scrollbar-hide">
-                {statusTasks.map((task) => (
+                {statusTasks.map((task, index) => (
                     <div
                     key={task.id}
                     draggable
                     onDragStart={(e) => onDragStart(e, task.id)}
                     onDragEnd={onDragEnd}
+                    onDrop={(e) => onCardDrop(e, task, index)} // Handle drop on card
                     onClick={() => onEdit(task)}
                     className={`bg-white rounded shadow-sm border border-gray-200 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow relative group
                         ${isCompact ? 'p-2' : 'p-3'}
+                        ${draggedTaskId === task.id ? 'opacity-50' : 'opacity-100'}
                     `}
                     >
                     {isCompact ? (
                         // Compact Card View
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between pointer-events-none">
                             <div className="flex items-center overflow-hidden mr-2">
                                 {/* Status/Priority Color Bar */}
                                 <div className={`flex-shrink-0 w-1.5 h-8 rounded-full mr-2 ${
@@ -220,7 +247,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                         </div>
                     ) : (
                         // Full Card View
-                        <>
+                        <div className="pointer-events-none">
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex gap-1">
                                     <Badge type="priority" value={task.priority} />
@@ -264,7 +291,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                                 task.priority === Priority.MEDIUM ? 'bg-yellow-500' : 'bg-blue-500'
                                 }`} />
                             </div>
-                        </>
+                        </div>
                     )}
                     </div>
                 ))}
@@ -278,7 +305,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             );
         })}
 
-        {/* Trash Bin Drop Zone (Always Visible) */}
+        {/* Trash Bin Drop Zone */}
         <div 
             className={`fixed bottom-8 right-8 w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 z-50 ${
                 isOverTrash ? 'bg-red-600 scale-110' : 'bg-gray-700 hover:bg-gray-800'

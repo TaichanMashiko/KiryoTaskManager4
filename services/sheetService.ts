@@ -174,22 +174,18 @@ export class SheetService {
   }
 
   // Prompt user to sign in
-  // Added 'silent' parameter to allow checking session without popup
   signIn(silent: boolean = false): void {
     if (this.tokenClient) {
-      // 'prompt: none' attempts to sign in without user interaction
       this.tokenClient.requestAccessToken({ 
-          prompt: silent ? 'none' : '' // Empty string is default behavior (consent if needed)
+          prompt: silent ? 'none' : ''
       });
     }
   }
 
-  // Check if we should attempt auto-login
   hasStoredAuth(): boolean {
     return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
   }
 
-  // Sign out
   signOut(onSignOut: () => void): void {
     const token = window.gapi.client.getToken();
     if (token !== null) {
@@ -208,7 +204,6 @@ export class SheetService {
     }
   }
 
-  // Get authenticated user's email and name
   private async fetchUserInfo() {
     try {
       const tokenObj = window.gapi.client.getToken();
@@ -224,7 +219,6 @@ export class SheetService {
       });
       
       if (!response.ok) {
-          // 401 means token invalid or scopes missing
           throw new Error(`UserInfo fetch failed: ${response.status}`);
       }
 
@@ -239,7 +233,6 @@ export class SheetService {
 
   // --- Helper Methods for Sheet Operations ---
 
-  // Setup initial sheets and headers if they don't exist
   async initializeSheets(): Promise<void> {
     await this.ensureAuth();
     try {
@@ -253,12 +246,11 @@ export class SheetService {
 
       // Define headers for each sheet
       const headers: Record<string, string[]> = {
-        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Tag', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility', 'PredecessorTaskId'],
+        [SHEET_NAMES.TASKS]: ['ID', 'Title', 'Detail', 'Assignee', 'Tag', 'StartDate', 'DueDate', 'Priority', 'Status', 'CreatedAt', 'UpdatedAt', 'CalendarEventId', 'Visibility', 'PredecessorTaskId', 'Order'],
         [SHEET_NAMES.USERS]: ['ID', 'Email', 'Role', 'Department', 'Name'],
         [SHEET_NAMES.TAGS]: ['ID', 'Name', 'Color']
       };
 
-      // Create missing sheets
       for (const name of Object.values(SHEET_NAMES)) {
         if (!existingTitles.includes(name)) {
           requests.push({ addSheet: { properties: { title: name } } });
@@ -272,7 +264,6 @@ export class SheetService {
         });
       }
 
-      // Write Headers if empty
       for (const [name, headerRow] of Object.entries(headers)) {
         const range = `${name}!A1:Z1`;
         const data = await window.gapi.client.sheets.spreadsheets.values.get({
@@ -288,7 +279,6 @@ export class SheetService {
             resource: { values: [headerRow] }
           });
           
-          // Setup defaults
           if (name === SHEET_NAMES.USERS && this.currentUserEmail) {
              await window.gapi.client.sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID,
@@ -330,7 +320,6 @@ export class SheetService {
     const users = await this.getUsers();
     let user = users.find(u => u.email.toLowerCase() === this.currentUserEmail.toLowerCase());
     
-    // Auto-register if not found
     if (!user) {
       try {
         const newName = this.currentUserName || this.currentUserEmail.split('@')[0];
@@ -386,7 +375,7 @@ export class SheetService {
     return rows.map((row: string[]) => ({
       id: row[0],
       name: row[1],
-      color: row[2] || '#9CA3AF', // Default gray
+      color: row[2] || '#9CA3AF',
     }));
   }
 
@@ -394,18 +383,13 @@ export class SheetService {
     await this.ensureAuth();
     const id = 'tag_' + Math.random().toString(36).substr(2, 9);
     
-    // Determine color: try to find one that is not used yet
-    // Ensure we compare uppercase to uppercase and handle potential undefined colors
     const usedColors = new Set(existingTags.map(t => (t.color || '').toUpperCase()));
     const availableColors = PRESET_COLORS.filter(c => !usedColors.has(c.toUpperCase()));
 
     let color;
     if (availableColors.length > 0) {
-        // Pick a random unused color
         color = availableColors[Math.floor(Math.random() * availableColors.length)];
     } else {
-        // If all presets are used, generate a random pleasant hex color
-        // This avoids reuse of existing colors when presets are exhausted
         const randomHex = Math.floor(Math.random()*16777215).toString(16);
         color = '#' + randomHex.padStart(6, '0');
     }
@@ -430,17 +414,18 @@ export class SheetService {
 
   async getTasks(): Promise<Task[]> {
     await this.ensureAuth();
+    // Range expanded to O (Column 15) for Order
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A2:N`, // Expanded range
+      range: `${SHEET_NAMES.TASKS}!A2:O`,
     });
     const rows = res.result.values || [];
-    return rows.map((row: string[]) => ({
+    const tasks = rows.map((row: string[]) => ({
       id: row[0],
       title: row[1],
       detail: row[2],
       assigneeEmail: row[3],
-      tag: row[4], // Was category
+      tag: row[4],
       startDate: row[5],
       dueDate: row[6],
       priority: row[7] as Priority,
@@ -450,19 +435,33 @@ export class SheetService {
       calendarEventId: row[11] || undefined,
       visibility: (row[12] as 'public' | 'private') || 'public',
       predecessorTaskId: row[13] || undefined,
+      order: row[14] ? Number(row[14]) : 0,
     }));
+    
+    // Sort by order ascending, then createdAt descending
+    return tasks.sort((a: Task, b: Task) => {
+        if ((a.order || 0) !== (b.order || 0)) {
+            return (a.order || 0) - (b.order || 0);
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }
 
   async createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
     await this.ensureAuth();
     const id = 'task_' + Math.random().toString(36).substr(2, 9);
     const now = new Date().toISOString();
+    
+    // Default order is large number if not specified
+    const order = task.order !== undefined ? task.order : 999999;
+
     const newTask: Task = {
       ...task,
       id,
       createdAt: now,
       updatedAt: now,
-      visibility: task.visibility || 'public', // default
+      visibility: task.visibility || 'public',
+      order,
     };
 
     const row = [
@@ -480,6 +479,7 @@ export class SheetService {
       newTask.calendarEventId || '',
       newTask.visibility,
       newTask.predecessorTaskId || '',
+      newTask.order,
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.append({
@@ -498,7 +498,6 @@ export class SheetService {
     const index = tasks.findIndex(t => t.id === task.id);
     if (index === -1) throw new Error('Task not found');
 
-    // Row index is data index + 2 (1 for header, 1 for 0-based)
     const rowIndex = index + 2;
     const now = new Date().toISOString();
     const updatedTask = { ...task, updatedAt: now };
@@ -518,11 +517,12 @@ export class SheetService {
       updatedTask.calendarEventId || '',
       updatedTask.visibility,
       updatedTask.predecessorTaskId || '',
+      updatedTask.order || 0,
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A${rowIndex}:N${rowIndex}`,
+      range: `${SHEET_NAMES.TASKS}!A${rowIndex}:O${rowIndex}`,
       valueInputOption: 'USER_ENTERED',
       resource: { values: [row] }
     });
@@ -531,8 +531,6 @@ export class SheetService {
   }
 
   async updateTaskStatus(taskId: string, status: Status): Promise<void> {
-    // getTasks calls ensureAuth, so we don't strictly need it here if we use this.getTasks()
-    // but better to be safe if implementation changes
     await this.ensureAuth(); 
     const tasks = await this.getTasks();
     const index = tasks.findIndex(t => t.id === taskId);
@@ -540,6 +538,58 @@ export class SheetService {
     
     const task = tasks[index];
     await this.updateTask({ ...task, status });
+  }
+
+  async updateTaskOrders(updatedTasks: Task[]): Promise<void> {
+    await this.ensureAuth();
+    const allTasks = await this.getTasks();
+    
+    // Create a map of updates for efficient lookup
+    const updatesMap = new Map(updatedTasks.map(t => [t.id, t.order]));
+    
+    // We need to write back all rows to ensure consistency or optimize by updating only changed rows.
+    // For simplicity and correctness with the existing API structure, we loop through updates.
+    // Optimization: Batch update could be used, but since rows are scattered, we'd need multiple ranges.
+    // Given the constraints, we will iterate. For a production app, batchUpdate with multiple ranges is better.
+    
+    // Let's optimize slightly: group by contiguous rows? No, order might change indices.
+    // We will just call updateTask for each changed task. 
+    // Since this might be slow, we can use a raw value update if we know row indices.
+    
+    const requests = [];
+    for (const updateTask of updatedTasks) {
+        const index = allTasks.findIndex(t => t.id === updateTask.id);
+        if (index !== -1) {
+            const rowIndex = index + 2;
+            // Only update the Order column (O, index 14)
+            // But valueInputOption is needed. 'values.update' only takes one range.
+            // 'batchUpdate' values is better.
+            
+            // Actually, let's just use the existing updateTask which is safe but maybe slow.
+            // To make it faster, let's construct a batchUpdate for values.
+        }
+    }
+    
+    // Better approach: Re-upload the whole table? No, too risky.
+    // Let's just sequential update for now or implement batch value update.
+    
+    // NOTE: For this demo scope, let's use a Promise.all with individual updates.
+    // But we only want to update the 'Order' column (Column O).
+    // range: `O${rowIndex}`
+    
+    const updatePromises = updatedTasks.map(t => {
+        const index = allTasks.findIndex(at => at.id === t.id);
+        if (index === -1) return Promise.resolve();
+        const rowIndex = index + 2;
+        return window.gapi.client.sheets.spreadsheets.values.update({
+             spreadsheetId: SPREADSHEET_ID,
+             range: `${SHEET_NAMES.TASKS}!O${rowIndex}`,
+             valueInputOption: 'USER_ENTERED',
+             resource: { values: [[t.order]] }
+        });
+    });
+    
+    await Promise.all(updatePromises);
   }
 
   async deleteTask(taskId: string): Promise<void> {
@@ -550,13 +600,11 @@ export class SheetService {
 
     const task = tasks[index];
 
-    // Googleカレンダーからの削除を試行
     if (task.calendarEventId) {
         try {
             await this.removeFromCalendar(task.calendarEventId);
         } catch (e) {
-            console.warn("Failed to remove from calendar (might be already deleted)", e);
-            // カレンダー削除に失敗してもタスク削除は続行する
+            console.warn("Failed to remove from calendar", e);
         }
     }
 
@@ -588,14 +636,11 @@ export class SheetService {
     return sheet ? sheet.properties.sheetId : 0;
   }
 
-  // --- Google Calendar Integration ---
-
   async addToCalendar(task: Task): Promise<any> {
     await this.ensureAuth();
     if (!task.startDate) throw new Error("開始日が設定されていません");
     if (!task.dueDate) throw new Error("期限が設定されていません");
 
-    // Google Calendar All-day event end date is exclusive (the day after)
     const endDateObj = new Date(task.dueDate);
     endDateObj.setDate(endDateObj.getDate() + 1);
     const endDateStr = endDateObj.toISOString().split('T')[0];
@@ -603,13 +648,9 @@ export class SheetService {
     const event = {
       summary: `[Kiryo] ${task.title}`,
       description: `${task.detail}\n\nタグ: ${task.tag}\n優先度: ${task.priority}\nステータス: ${task.status}`,
-      start: {
-        date: task.startDate, // YYYY-MM-DD for all-day
-      },
-      end: {
-        date: endDateStr,
-      },
-      transparency: 'transparent', // "Available" (doesn't block calendar)
+      start: { date: task.startDate },
+      end: { date: endDateStr },
+      transparency: 'transparent',
     };
 
     try {
@@ -620,7 +661,7 @@ export class SheetService {
       return response.result;
     } catch (e: any) {
       console.error("Failed to add to calendar", e);
-      throw new Error("カレンダーへの追加に失敗しました。権限がないか、エラーが発生しました。");
+      throw new Error("カレンダーへの追加に失敗しました。");
     }
   }
 
@@ -632,10 +673,7 @@ export class SheetService {
         eventId: eventId,
       });
     } catch (e: any) {
-      if (e.status === 404 || e.result?.error?.code === 404) {
-         console.log("Event not found in calendar, likely already deleted.");
-         return;
-      }
+      if (e.status === 404 || e.result?.error?.code === 404) return;
       console.error("Failed to remove from calendar", e);
       throw e;
     }
