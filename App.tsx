@@ -157,9 +157,11 @@ function App() {
       setLoading(true);
 
       if (taskData.tag) {
-        const existingTag = tags.find(t => t.name === taskData.tag);
+        // Check case-insensitive
+        const existingTag = tags.find(t => t.name.toLowerCase() === (taskData.tag || '').toLowerCase());
         if (!existingTag) {
             try {
+                // Pass existing tags to avoid color collision
                 const newTag = await sheetService.createTag(taskData.tag, tags);
                 setTags(prev => [...prev, newTag]);
             } catch (e) {
@@ -248,33 +250,36 @@ function App() {
           }
       }
 
-      // 2. Calculate new order locally to update UI immediately
       const sourceStatus = draggedTask.status;
-      
-      // Create a copy of tasks without the dragged task
+
+      // 2. Local State Update (Robust logic)
+      // Remove dragged task from the current list
       const otherTasks = tasks.filter(t => t.id !== taskId);
       
-      // Get tasks in the target column (excluding dragged task), sorted by order
+      // Get all tasks for the *target* status from the remaining tasks
       const targetColumnTasks = otherTasks
           .filter(t => t.status === newStatus)
           .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-      // Insert the dragged task at the new index
-      // Update its status and visibility/properties if needed
+      // Determine safe insertion index
+      // newIndex comes from UI, which might be based on "before drop" state
+      let safeIndex = newIndex;
+      if (safeIndex < 0) safeIndex = 0;
+      if (safeIndex > targetColumnTasks.length) safeIndex = targetColumnTasks.length;
+
+      // Update dragged task status
       const updatedDraggedTask = { ...draggedTask, status: newStatus };
-      
-      // Clamp index to bounds
-      const safeIndex = Math.max(0, Math.min(newIndex, targetColumnTasks.length));
-      
+
+      // Insert into the target array
       targetColumnTasks.splice(safeIndex, 0, updatedDraggedTask);
 
-      // Re-assign order numbers for the target column
+      // Re-assign order for the target column (0, 1, 2...)
       const updatedTargetColumn = targetColumnTasks.map((t, index) => ({
           ...t,
           order: index
       }));
 
-      // Combine with tasks from other columns (unchanged)
+      // Combine with tasks from other columns
       const tasksInOtherColumns = otherTasks.filter(t => t.status !== newStatus);
       const newAllTasks = [...tasksInOtherColumns, ...updatedTargetColumn].sort((a, b) => (a.order || 0) - (b.order || 0));
 
@@ -282,12 +287,10 @@ function App() {
 
       try {
           // 3. Sync to backend
-          // If status changed, update it
           if (sourceStatus !== newStatus) {
                await sheetService.updateTaskStatus(taskId, newStatus);
           }
-          // Update orders for all affected tasks in the target column
-          // We send the whole updated column to ensure consistency
+          // Update orders for all affected tasks
           await sheetService.updateTaskOrders(updatedTargetColumn);
       } catch (e) {
           console.error("Reorder failed", e);
@@ -357,7 +360,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.8</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.9</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
