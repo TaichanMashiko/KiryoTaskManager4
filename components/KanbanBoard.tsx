@@ -96,7 +96,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
     const taskId = e.dataTransfer.getData('taskId');
     if (!taskId) return;
 
-    // If dropping on the column background (not on a card), we append to the end
+    // If onTaskReorder exists, use it to append to end
     if (onTaskReorder) {
         onTaskReorder(taskId, status, statusTasksCount);
     } else {
@@ -107,7 +107,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
   // Drop on Card (Insert before)
   const onCardDrop = (e: DragEvent<HTMLDivElement>, targetTask: Task, index: number) => {
       e.preventDefault();
-      e.stopPropagation(); // Stop bubbling to column drop
+      e.stopPropagation(); // Stop bubbling to column drop!
       const draggedId = e.dataTransfer.getData('taskId');
       
       if (draggedId === targetTask.id) return; // Dropped on self
@@ -216,7 +216,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                     onClick={() => onEdit(task)}
                     className={`bg-white rounded shadow-sm border border-gray-200 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow relative group
                         ${isCompact ? 'p-2' : 'p-3'}
-                        ${draggedTaskId === task.id ? 'opacity-50' : 'opacity-100'}
+                        ${draggedTaskId === task.id ? 'opacity-40 border-dashed border-2 border-indigo-400 bg-indigo-50' : 'opacity-100'}
                     `}
                     >
                     {isCompact ? (
@@ -305,7 +305,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             );
         })}
 
-        {/* Trash Bin Drop Zone */}
+        {/* Trash Bin Drop Zone (Always Visible) */}
         <div 
             className={`fixed bottom-8 right-8 w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 z-50 ${
                 isOverTrash ? 'bg-red-600 scale-110' : 'bg-gray-700 hover:bg-gray-800'

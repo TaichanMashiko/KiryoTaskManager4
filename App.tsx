@@ -226,6 +226,7 @@ function App() {
     }
 
     try {
+      // Optimistic update
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
       await sheetService.updateTaskStatus(taskId, newStatus);
     } catch (e) {
@@ -235,38 +236,62 @@ function App() {
   };
 
   const handleTaskReorder = async (taskId: string, newStatus: Status, newIndex: number) => {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
+      const draggedTask = tasks.find(t => t.id === taskId);
+      if (!draggedTask) return;
 
-      // Filter tasks in the target column
-      const columnTasks = tasks.filter(t => t.status === newStatus && t.id !== taskId)
-                               .sort((a, b) => (a.order || 0) - (b.order || 0));
+      // 1. Check dependency constraints if status is changing
+      if (draggedTask.status !== newStatus) {
+          const check = checkDependency({ ...draggedTask, status: newStatus });
+          if (!check.ok) {
+              alert(check.message);
+              return;
+          }
+      }
 
-      // Insert at new index
-      columnTasks.splice(newIndex, 0, { ...task, status: newStatus });
+      // 2. Calculate new order locally to update UI immediately
+      const sourceStatus = draggedTask.status;
+      
+      // Create a copy of tasks without the dragged task
+      const otherTasks = tasks.filter(t => t.id !== taskId);
+      
+      // Get tasks in the target column (excluding dragged task), sorted by order
+      const targetColumnTasks = otherTasks
+          .filter(t => t.status === newStatus)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-      // Re-assign orders for the whole column to be safe and clean
-      // We also update local state immediately for responsiveness
-      const updatedColumnTasks = columnTasks.map((t, index) => ({
+      // Insert the dragged task at the new index
+      // Update its status and visibility/properties if needed
+      const updatedDraggedTask = { ...draggedTask, status: newStatus };
+      
+      // Clamp index to bounds
+      const safeIndex = Math.max(0, Math.min(newIndex, targetColumnTasks.length));
+      
+      targetColumnTasks.splice(safeIndex, 0, updatedDraggedTask);
+
+      // Re-assign order numbers for the target column
+      const updatedTargetColumn = targetColumnTasks.map((t, index) => ({
           ...t,
-          order: index, // Normalize order 0, 1, 2...
+          order: index
       }));
 
-      // Update local state: merge updated column tasks with other tasks
-      const otherTasks = tasks.filter(t => t.status !== newStatus && t.id !== taskId);
-      setTasks([...otherTasks, ...updatedColumnTasks].sort((a, b) => (a.order || 0) - (b.order || 0)));
+      // Combine with tasks from other columns (unchanged)
+      const tasksInOtherColumns = otherTasks.filter(t => t.status !== newStatus);
+      const newAllTasks = [...tasksInOtherColumns, ...updatedTargetColumn].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      setTasks(newAllTasks);
 
       try {
-          // If status changed, update it first (or included in updateTaskOrders if we send full object)
-          // sheetService.updateTaskOrders only updates Order column.
-          // So if status changed, we need to update that too.
-          if (task.status !== newStatus) {
+          // 3. Sync to backend
+          // If status changed, update it
+          if (sourceStatus !== newStatus) {
                await sheetService.updateTaskStatus(taskId, newStatus);
           }
-          await sheetService.updateTaskOrders(updatedColumnTasks);
+          // Update orders for all affected tasks in the target column
+          // We send the whole updated column to ensure consistency
+          await sheetService.updateTaskOrders(updatedTargetColumn);
       } catch (e) {
           console.error("Reorder failed", e);
-          loadData(true);
+          loadData(true); // Revert on error
       }
   };
 
@@ -332,7 +357,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
           <div className="flex items-center">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">Kiryo Tasks</h1>
-            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.7</span>
+            <span className="ml-4 px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded-md font-medium hidden sm:inline-block">Alpha 1.8</span>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser && (
