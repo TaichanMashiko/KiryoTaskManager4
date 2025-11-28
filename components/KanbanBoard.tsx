@@ -97,8 +97,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
     if (!taskId) return;
     
     // Clear drag state immediately to prevent ghosting
-    setDraggedTaskId(null);
-    setIsDragging(false);
+    onDragEnd();
 
     if (onTaskReorder) {
         onTaskReorder(taskId, status, statusTasksCount);
@@ -116,8 +115,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
       if (draggedId === targetTask.id) return; // Dropped on self
 
       // Clear drag state immediately to prevent ghosting
-      setDraggedTaskId(null);
-      setIsDragging(false);
+      onDragEnd();
 
       // Determine insert position based on mouse Y relative to card center
       const rect = e.currentTarget.getBoundingClientRect();
@@ -141,14 +139,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
 
   const onTrashDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
+    e.stopPropagation(); // Stop propagation to avoid any parent handlers
+    
     const taskId = e.dataTransfer.getData('taskId');
+    
+    // Force cleanup UI immediately
+    onDragEnd();
+
     if (taskId) {
       onDelete(taskId);
     }
-    setIsOverTrash(false);
-    setDraggedTaskId(null);
-    setIsDragging(false);
   };
 
   return (

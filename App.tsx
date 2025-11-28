@@ -203,17 +203,26 @@ function App() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!window.confirm("本当にこのタスクを削除しますか？カレンダーに連携されている場合、カレンダーからも削除されます。")) return;
-    try {
-      setLoading(true);
-      await sheetService.deleteTask(taskId);
-      await loadData(true);
-    } catch (e: any) {
-      console.error(e);
-      alert("削除に失敗しました: " + e.message);
-    } finally {
-      setLoading(false);
-    }
+    // 楽観的更新: 画面から即座に削除
+    const originalTasks = [...tasks];
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+
+    // 非同期で削除確認と実行
+    // setTimeoutを使用してドラッグ処理との競合を避ける（特にカンバンのゴミ箱ドロップ時）
+    setTimeout(async () => {
+        if (!window.confirm("本当にこのタスクを削除しますか？カレンダーに連携されている場合、カレンダーからも削除されます。")) {
+            setTasks(originalTasks); // キャンセルされたら戻す
+            return;
+        }
+        try {
+            await sheetService.deleteTask(taskId);
+            // 成功時は何もしない（画面はすでに更新済み）
+        } catch (e: any) {
+            console.error(e);
+            alert("削除に失敗しました: " + e.message);
+            setTasks(originalTasks); // エラー時は戻す
+        }
+    }, 10);
   };
 
   const handleTaskMove = async (taskId: string, newStatus: Status) => {
@@ -252,36 +261,50 @@ function App() {
 
       const sourceStatus = draggedTask.status;
 
-      // 2. Local State Update (Robust logic)
-      // Remove dragged task from the current list
-      const otherTasks = tasks.filter(t => t.id !== taskId);
+      // 2. Local State Update (Strict Array Manipulation)
+      // Create a new copy of tasks to avoid direct mutation issues
+      const currentTasks = [...tasks].sort((a, b) => (a.order || 0) - (b.order || 0));
       
-      // Get all tasks for the *target* status from the remaining tasks
-      const targetColumnTasks = otherTasks
-          .filter(t => t.status === newStatus)
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+      // Remove the dragged task from the array completely
+      const taskIndex = currentTasks.findIndex(t => t.id === taskId);
+      if (taskIndex === -1) return;
+      currentTasks.splice(taskIndex, 1);
 
-      // Determine safe insertion index
-      // newIndex comes from UI, which might be based on "before drop" state
+      // Filter tasks belonging to the target status
+      // We need to find the correct insertion point relative to other tasks in that column
+      const targetColumnTasks = currentTasks.filter(t => t.status === newStatus);
+      const otherColumnTasks = currentTasks.filter(t => t.status !== newStatus);
+
+      // Clamp safeIndex
       let safeIndex = newIndex;
       if (safeIndex < 0) safeIndex = 0;
       if (safeIndex > targetColumnTasks.length) safeIndex = targetColumnTasks.length;
 
-      // Update dragged task status
+      // Update the dragged task
       const updatedDraggedTask = { ...draggedTask, status: newStatus };
 
-      // Insert into the target array
+      // Insert into the target column array at the specific index
       targetColumnTasks.splice(safeIndex, 0, updatedDraggedTask);
 
-      // Re-assign order for the target column (0, 1, 2...)
+      // Re-assign order for the target column to ensure they are sequential
+      // We also need to ensure global order consistency if we rely on it, 
+      // but usually column-based ordering is sufficient for Kanban.
+      // Here we re-assign order based on the new array structure.
+      
+      // Combine back: 
+      // We need to keep the relative order of other columns as is? 
+      // Or just re-assign orders for ALL tasks based on some logic?
+      // Simple approach: Target column gets new orders, others keep theirs.
+      // BUT, to allow easy global sorting, let's just make sure target column orders are correct relative to each other.
+      // We can use floating point orders or large gaps, but integer re-indexing is safer for small lists.
+      
       const updatedTargetColumn = targetColumnTasks.map((t, index) => ({
           ...t,
           order: index
       }));
 
-      // Combine with tasks from other columns
-      const tasksInOtherColumns = otherTasks.filter(t => t.status !== newStatus);
-      const newAllTasks = [...tasksInOtherColumns, ...updatedTargetColumn].sort((a, b) => (a.order || 0) - (b.order || 0));
+      // Merge back. We use the updated target column tasks and the untouched other column tasks.
+      const newAllTasks = [...otherColumnTasks, ...updatedTargetColumn];
 
       setTasks(newAllTasks);
 
@@ -290,7 +313,7 @@ function App() {
           if (sourceStatus !== newStatus) {
                await sheetService.updateTaskStatus(taskId, newStatus);
           }
-          // Update orders for all affected tasks
+          // Update orders for the affected column
           await sheetService.updateTaskOrders(updatedTargetColumn);
       } catch (e) {
           console.error("Reorder failed", e);
