@@ -140,14 +140,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
 
   const onTrashDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation(); // Stop propagation to avoid any parent handlers
+    e.stopPropagation(); // Stop propagation
     
     const taskId = e.dataTransfer.getData('taskId');
     
+    // 1. Reset Drag State Immediately
     onDragEnd();
 
+    // 2. Use setTimeout to defer the delete confirmation.
+    // This allows the drag operation to fully complete and the UI to update (removing the ghost image)
+    // BEFORE the blocking window.confirm dialog appears.
     if (taskId) {
-      onDelete(taskId);
+      setTimeout(() => {
+          onDelete(taskId);
+      }, 10);
     }
   };
 
