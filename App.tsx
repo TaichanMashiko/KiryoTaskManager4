@@ -203,26 +203,22 @@ function App() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    if (!window.confirm("本当にこのタスクを削除しますか？カレンダーに連携されている場合、カレンダーからも削除されます。")) {
+        return;
+    }
+
     // 楽観的更新: 画面から即座に削除
     const originalTasks = [...tasks];
     setTasks(prev => prev.filter(t => t.id !== taskId));
 
-    // 非同期で削除確認と実行
-    // setTimeoutを使用してドラッグ処理との競合を避ける（特にカンバンのゴミ箱ドロップ時）
-    setTimeout(async () => {
-        if (!window.confirm("本当にこのタスクを削除しますか？カレンダーに連携されている場合、カレンダーからも削除されます。")) {
-            setTasks(originalTasks); // キャンセルされたら戻す
-            return;
-        }
-        try {
-            await sheetService.deleteTask(taskId);
-            // 成功時は何もしない（画面はすでに更新済み）
-        } catch (e: any) {
-            console.error(e);
-            alert("削除に失敗しました: " + e.message);
-            setTasks(originalTasks); // エラー時は戻す
-        }
-    }, 10);
+    try {
+        await sheetService.deleteTask(taskId);
+        // 成功時は何もしない
+    } catch (e: any) {
+        console.error(e);
+        alert("削除に失敗しました: " + e.message);
+        setTasks(originalTasks); // エラー時は戻す
+    }
   };
 
   const handleTaskMove = async (taskId: string, newStatus: Status) => {
@@ -250,7 +246,7 @@ function App() {
       const draggedTask = tasks.find(t => t.id === taskId);
       if (!draggedTask) return;
 
-      // 1. Check dependency constraints if status is changing
+      // 1. Dependency Check
       if (draggedTask.status !== newStatus) {
           const check = checkDependency({ ...draggedTask, status: newStatus });
           if (!check.ok) {
@@ -261,60 +257,52 @@ function App() {
 
       const sourceStatus = draggedTask.status;
 
-      // 2. Local State Update (Strict Array Manipulation)
-      // Create a new copy of tasks to avoid direct mutation issues
+      // 2. Local State Update - STRICT LOGIC
+      // 現在の全タスク（順序ソート済み）
       const currentTasks = [...tasks].sort((a, b) => (a.order || 0) - (b.order || 0));
-      
-      // Remove the dragged task from the array completely
-      const taskIndex = currentTasks.findIndex(t => t.id === taskId);
-      if (taskIndex === -1) return;
-      currentTasks.splice(taskIndex, 1);
 
-      // Filter tasks belonging to the target status
-      // We need to find the correct insertion point relative to other tasks in that column
-      const targetColumnTasks = currentTasks.filter(t => t.status === newStatus);
-      const otherColumnTasks = currentTasks.filter(t => t.status !== newStatus);
+      // 1. 移動するタスクをリストから除外する
+      const tasksWithoutMoved = currentTasks.filter(t => t.id !== taskId);
 
-      // Clamp safeIndex
+      // 2. 移動先のステータスに属するタスクを抽出する
+      const destColumnTasks = tasksWithoutMoved.filter(t => t.status === newStatus);
+
+      // 3. インデックスの正規化 (範囲内に収める)
       let safeIndex = newIndex;
       if (safeIndex < 0) safeIndex = 0;
-      if (safeIndex > targetColumnTasks.length) safeIndex = targetColumnTasks.length;
+      if (safeIndex > destColumnTasks.length) safeIndex = destColumnTasks.length;
 
-      // Update the dragged task
+      // 4. 新しいステータス情報を更新
       const updatedDraggedTask = { ...draggedTask, status: newStatus };
 
-      // Insert into the target column array at the specific index
-      targetColumnTasks.splice(safeIndex, 0, updatedDraggedTask);
+      // 5. 正しい位置に挿入
+      destColumnTasks.splice(safeIndex, 0, updatedDraggedTask);
 
-      // Re-assign order for the target column to ensure they are sequential
-      // We also need to ensure global order consistency if we rely on it, 
-      // but usually column-based ordering is sufficient for Kanban.
-      // Here we re-assign order based on the new array structure.
+      // 6. 移動先カラムの並び順（order）を再番付 (0, 1, 2...)
+      // グローバルなorder値を維持するため、ベースとなる値が必要だが、
+      // 簡易的にカラム内順序を整理するために、全タスクをマージして再計算は複雑になる。
+      // ここでは、「移動先カラムのタスク」に新しいorderを割り当て、
+      // 「それ以外のタスク」はそのままにする。
       
-      // Combine back: 
-      // We need to keep the relative order of other columns as is? 
-      // Or just re-assign orders for ALL tasks based on some logic?
-      // Simple approach: Target column gets new orders, others keep theirs.
-      // BUT, to allow easy global sorting, let's just make sure target column orders are correct relative to each other.
-      // We can use floating point orders or large gaps, but integer re-indexing is safer for small lists.
-      
-      const updatedTargetColumn = targetColumnTasks.map((t, index) => ({
+      const updatedDestColumnTasks = destColumnTasks.map((t, index) => ({
           ...t,
           order: index
       }));
 
-      // Merge back. We use the updated target column tasks and the untouched other column tasks.
-      const newAllTasks = [...otherColumnTasks, ...updatedTargetColumn];
+      // 7. 全タスクリストを再構築
+      // 移動先カラム以外のタスク + 更新された移動先カラムタスク
+      const otherTasks = tasksWithoutMoved.filter(t => t.status !== newStatus);
+      const newAllTasks = [...otherTasks, ...updatedDestColumnTasks];
 
       setTasks(newAllTasks);
 
+      // 3. Backend Sync
       try {
-          // 3. Sync to backend
           if (sourceStatus !== newStatus) {
                await sheetService.updateTaskStatus(taskId, newStatus);
           }
-          // Update orders for the affected column
-          await sheetService.updateTaskOrders(updatedTargetColumn);
+          // 並び順が変わったタスク（移動先カラム全体）を一括更新
+          await sheetService.updateTaskOrders(updatedDestColumnTasks);
       } catch (e) {
           console.error("Reorder failed", e);
           loadData(true); // Revert on error
