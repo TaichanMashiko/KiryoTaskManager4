@@ -68,7 +68,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
     }
 
     return {
-      dates: dateArray,
+      dates,
       startDate: min
     };
   }, [tasks]);
