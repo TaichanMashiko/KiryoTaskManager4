@@ -1,4 +1,3 @@
-
 import { Task, User, Tag, Status, Priority, SPREADSHEET_ID, SHEET_NAMES } from '../types';
 import { GOOGLE_API_KEY, GOOGLE_CLIENT_ID, SCOPES, DISCOVERY_DOCS } from '../config';
 
@@ -397,52 +396,34 @@ export class SheetService {
     return rows.map((row: string[]) => ({
       id: row[0],
       name: row[1],
-      color: row[2] || '#9CA3AF',
+      color: row[2],
     }));
   }
 
-  async createTag(tagName: string, existingTags: Tag[] = []): Promise<Tag> {
+  async createTag(name: string, currentTags: Tag[]): Promise<Tag> {
     await this.ensureAuth();
-    const id = 'tag_' + Math.random().toString(36).substr(2, 9);
+    const newId = (currentTags.length + 1).toString();
+    const color = PRESET_COLORS[currentTags.length % PRESET_COLORS.length];
+    const newTag: Tag = { id: newId, name, color };
     
-    const usedColors = new Set(existingTags.map(t => (t.color || '').toUpperCase()));
-    const availableColors = PRESET_COLORS.filter(c => !usedColors.has(c.toUpperCase()));
-
-    let color;
-    if (availableColors.length > 0) {
-        color = availableColors[Math.floor(Math.random() * availableColors.length)];
-    } else {
-        const randomHex = Math.floor(Math.random()*16777215).toString(16);
-        color = '#' + randomHex.padStart(6, '0');
-    }
-
-    const newTag: Tag = {
-        id,
-        name: tagName,
-        color
-    };
-
-    const row = [newTag.id, newTag.name, newTag.color];
-
     await window.gapi.client.sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAMES.TAGS}!A2`,
-        valueInputOption: 'USER_ENTERED',
-        resource: { values: [row] }
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAMES.TAGS}!A2`,
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: [[newId, name, color]] }
     });
-
+    
     return newTag;
   }
 
   async getTasks(): Promise<Task[]> {
     await this.ensureAuth();
-    // Range expanded to O (Column 15) for Order
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TASKS}!A2:O`,
     });
     const rows = res.result.values || [];
-    const tasks = rows.map((row: string[]) => ({
+    return rows.map((row: string[]) => ({
       id: row[0],
       title: row[1],
       detail: row[2],
@@ -454,36 +435,37 @@ export class SheetService {
       status: row[8] as Status,
       createdAt: row[9],
       updatedAt: row[10],
-      calendarEventId: row[11] || undefined,
+      calendarEventId: row[11],
       visibility: (row[12] as 'public' | 'private') || 'public',
-      predecessorTaskId: row[13] || undefined,
-      order: row[14] ? Number(row[14]) : 0,
+      predecessorTaskId: row[13],
+      order: row[14] ? parseInt(row[14]) : 0,
     }));
-    
-    // Sort by order ascending, then createdAt descending
-    return tasks.sort((a: Task, b: Task) => {
-        if ((a.order || 0) !== (b.order || 0)) {
-            return (a.order || 0) - (b.order || 0);
-        }
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
   }
 
-  async createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
+  async createTask(task: Partial<Task>): Promise<Task> {
     await this.ensureAuth();
     const id = 'task_' + Math.random().toString(36).substr(2, 9);
     const now = new Date().toISOString();
     
-    // Default order is large number if not specified
-    const order = task.order !== undefined ? task.order : 999999;
-
+    const tasks = await this.getTasks();
+    const maxOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.order || 0)) : 0;
+    
     const newTask: Task = {
-      ...task,
       id,
+      title: task.title || '',
+      detail: task.detail || '',
+      assigneeEmail: task.assigneeEmail || '',
+      tag: task.tag || '',
+      startDate: task.startDate || '',
+      dueDate: task.dueDate || '',
+      priority: task.priority || Priority.MEDIUM,
+      status: task.status || Status.NOT_STARTED,
       createdAt: now,
       updatedAt: now,
+      calendarEventId: '',
       visibility: task.visibility || 'public',
-      order,
+      predecessorTaskId: task.predecessorTaskId || '',
+      order: maxOrder + 1,
     };
 
     const row = [
@@ -498,10 +480,10 @@ export class SheetService {
       newTask.status,
       newTask.createdAt,
       newTask.updatedAt,
-      newTask.calendarEventId || '',
+      newTask.calendarEventId,
       newTask.visibility,
-      newTask.predecessorTaskId || '',
-      newTask.order,
+      newTask.predecessorTaskId,
+      newTask.order
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.append({
@@ -519,8 +501,8 @@ export class SheetService {
     const rowIndex = await this.getRowIndex(task.id);
     if (rowIndex === -1) throw new Error('Task not found');
 
-    const now = new Date().toISOString();
-    const updatedTask = { ...task, updatedAt: now };
+    const updatedAt = new Date().toISOString();
+    const updatedTask = { ...task, updatedAt };
 
     const row = [
       updatedTask.id,
@@ -534,10 +516,10 @@ export class SheetService {
       updatedTask.status,
       updatedTask.createdAt,
       updatedTask.updatedAt,
-      updatedTask.calendarEventId || '',
+      updatedTask.calendarEventId,
       updatedTask.visibility,
-      updatedTask.predecessorTaskId || '',
-      updatedTask.order || 0,
+      updatedTask.predecessorTaskId,
+      updatedTask.order
     ];
 
     await window.gapi.client.sheets.spreadsheets.values.update({
@@ -549,171 +531,120 @@ export class SheetService {
 
     return updatedTask;
   }
-
+  
   async updateTaskStatus(taskId: string, status: Status): Promise<void> {
-    await this.ensureAuth(); 
-    const tasks = await this.getTasks();
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) throw new Error('Task not found');
+    await this.ensureAuth();
+    const rowIndex = await this.getRowIndex(taskId);
+    if (rowIndex === -1) return;
     
-    await this.updateTask({ ...task, status });
+    await window.gapi.client.sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        resource: {
+            data: [
+                {
+                    range: `${SHEET_NAMES.TASKS}!I${rowIndex}`,
+                    values: [[status]]
+                },
+                {
+                    range: `${SHEET_NAMES.TASKS}!K${rowIndex}`,
+                    values: [[new Date().toISOString()]]
+                }
+            ],
+            valueInputOption: 'USER_ENTERED'
+        }
+    });
   }
 
-  async updateTaskOrders(updatedTasks: Task[]): Promise<void> {
+  async deleteTask(taskId: string, title?: string): Promise<void> {
     await this.ensureAuth();
-    
-    // Fetch all IDs from A:A for correct mapping
-    const res = await window.gapi.client.sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A:A`,
+    const rowIndex = await this.getRowIndex(taskId);
+    if (rowIndex === -1) return;
+
+    const spreadsheet = await window.gapi.client.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID
     });
-    const rows = res.result.values || [];
-    const idToRowMap = new Map<string, number>();
-    rows.forEach((row: string[], i: number) => {
-        if (row[0]) idToRowMap.set(row[0], i + 1); // 1-based index
-    });
-    
-    const updatePromises = updatedTasks.map(t => {
-        const rowIndex = idToRowMap.get(t.id);
-        if (!rowIndex) return Promise.resolve();
-        
-        return window.gapi.client.sheets.spreadsheets.values.update({
-             spreadsheetId: SPREADSHEET_ID,
-             range: `${SHEET_NAMES.TASKS}!O${rowIndex}`,
-             valueInputOption: 'USER_ENTERED',
-             resource: { values: [[t.order]] }
-        });
-    });
-    
-    await Promise.all(updatePromises);
-  }
-
-  async deleteTask(taskId: string, verificationTitle?: string): Promise<void> {
-    await this.ensureAuth();
-    
-    // 1. Fetch ID and Title columns (A:B) to robustly identify the row.
-    const res = await window.gapi.client.sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A:B`, // A: ID, B: Title
-    });
-    // Explicitly cast the rows to string[][] to avoid implicit 'any' error during build
-    const rows = (res.result.values as string[][]) || [];
-    
-    let rowIndex = -1;
-
-    interface CandidateRow {
-        id: string;
-        title: string;
-        physicalRow: number;
-    }
-
-    // Find all rows matching the ID
-    const candidates: CandidateRow[] = rows
-        .map((row: string[], index: number) => ({ id: row[0], title: row[1], physicalRow: index + 1 }))
-        .filter((item: CandidateRow) => item.id === taskId);
-
-    if (candidates.length === 0) throw new Error('Task not found in sheet');
-
-    // If verification title is provided, try to match it to disambiguate duplicates
-    if (verificationTitle && candidates.length > 1) {
-        const titleMatch = candidates.find((c: CandidateRow) => c.title === verificationTitle);
-        if (titleMatch) {
-            rowIndex = titleMatch.physicalRow;
-        }
-    }
-
-    // Fallback: If no title match or only 1 candidate, use the first candidate
-    if (rowIndex === -1) {
-        rowIndex = candidates[0].physicalRow;
-    }
-
-    // Safety Check (Redundant now but good for sanity)
-    if (rowIndex === -1) throw new Error('Task not found');
-
-    // Retrieve task details for calendar event deletion if needed
-    const tasks = await this.getTasks();
-    const task = tasks.find(t => t.id === taskId);
-
-    if (task && task.calendarEventId) {
-        try {
-            await this.removeFromCalendar(task.calendarEventId);
-        } catch (e) {
-            console.warn("Failed to remove from calendar", e);
-        }
-    }
-
-    const sheetId = await this.getSheetId(SHEET_NAMES.TASKS);
-    
-    // 3. Calculate 0-based index for deleteDimension
-    const startIndex = rowIndex - 1;
+    const sheet = spreadsheet.result.sheets.find((s: any) => s.properties.title === SHEET_NAMES.TASKS);
+    if (!sheet) return;
+    const sheetId = sheet.properties.sheetId;
 
     await window.gapi.client.sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       resource: {
-        requests: [{
-          deleteDimension: {
-            range: {
-              sheetId: sheetId,
-              dimension: 'ROWS',
-              startIndex: startIndex,
-              endIndex: startIndex + 1
+        requests: [
+          {
+            deleteDimension: {
+              range: {
+                sheetId: sheetId,
+                dimension: 'ROWS',
+                startIndex: rowIndex - 1,
+                endIndex: rowIndex
+              }
             }
           }
-        }]
+        ]
       }
     });
   }
-
-  private async getSheetId(sheetTitle: string): Promise<number> {
+  
+  async updateTaskOrders(tasks: Task[]): Promise<void> {
     await this.ensureAuth();
-    const spreadsheet = await window.gapi.client.sheets.spreadsheets.get({
-      spreadsheetId: SPREADSHEET_ID,
-    });
-    const sheet = spreadsheet.result.sheets.find((s: any) => s.properties.title === sheetTitle);
-    return sheet ? sheet.properties.sheetId : 0;
+    
+    const data: any[] = [];
+    
+    for (const task of tasks) {
+        const rowIndex = await this.getRowIndex(task.id);
+        if (rowIndex !== -1) {
+            data.push({
+                range: `${SHEET_NAMES.TASKS}!O${rowIndex}`,
+                values: [[task.order]]
+            });
+        }
+    }
+    
+    if (data.length > 0) {
+        await window.gapi.client.sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            resource: {
+                data: data,
+                valueInputOption: 'USER_ENTERED'
+            }
+        });
+    }
   }
 
   async addToCalendar(task: Task): Promise<any> {
     await this.ensureAuth();
-    if (!task.startDate) throw new Error("開始日が設定されていません");
-    if (!task.dueDate) throw new Error("期限が設定されていません");
-
-    const endDateObj = new Date(task.dueDate);
-    endDateObj.setDate(endDateObj.getDate() + 1);
-    const endDateStr = endDateObj.toISOString().split('T')[0];
+    if (!task.startDate || !task.dueDate) return null;
 
     const event = {
-      summary: `[Kiryo] ${task.title}`,
-      description: `${task.detail}\n\nタグ: ${task.tag}\n優先度: ${task.priority}\nステータス: ${task.status}`,
-      start: { date: task.startDate },
-      end: { date: endDateStr },
-      transparency: 'transparent',
+      summary: task.title,
+      description: task.detail,
+      start: {
+        date: task.startDate, 
+      },
+      end: {
+        date: task.dueDate,
+      },
     };
 
-    try {
-      const response = await window.gapi.client.calendar.events.insert({
-        calendarId: 'primary',
-        resource: event,
-      });
-      return response.result;
-    } catch (e: any) {
-      console.error("Failed to add to calendar", e);
-      throw new Error("カレンダーへの追加に失敗しました。");
+    if (task.calendarEventId) {
+        try {
+            await window.gapi.client.calendar.events.update({
+                calendarId: 'primary',
+                eventId: task.calendarEventId,
+                resource: event
+            });
+            return { id: task.calendarEventId };
+        } catch (e) {
+            console.warn("Event not found, creating new");
+        }
     }
-  }
 
-  async removeFromCalendar(eventId: string): Promise<void> {
-    await this.ensureAuth();
-    try {
-      await window.gapi.client.calendar.events.delete({
-        calendarId: 'primary',
-        eventId: eventId,
-      });
-    } catch (e: any) {
-      if (e.status === 404 || e.result?.error?.code === 404) return;
-      console.error("Failed to remove from calendar", e);
-      throw e;
-    }
+    const res = await window.gapi.client.calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+    });
+    return res.result;
   }
 }
 

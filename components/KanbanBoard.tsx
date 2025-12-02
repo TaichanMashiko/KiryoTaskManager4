@@ -186,7 +186,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 key={status}
                 className={`transition-all duration-300 ease-in-out rounded-lg flex flex-col max-h-[calc(100vh-220px)]
                     ${isCollapsed 
-                        ? 'w-12 min-w-[3rem] bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100 items-center py-4 flex-none' 
+                        ? 'w-12 flex-none min-w-[3rem] bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100 items-center py-4' 
                         : 'flex-1 min-w-[260px] bg-gray-100'
                     }
                 `}
@@ -208,7 +208,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                         <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
                             <span 
                                 className="text-lg font-bold text-gray-500 tracking-widest whitespace-nowrap select-none"
-                                style={{ writingMode: 'vertical-rl' }}
+                                style={{ 
+                                    writingMode: 'vertical-rl',
+                                    textOrientation: 'upright' // 日本語・英語ともに正立させる
+                                }}
                             >
                                 {status}
                             </span>

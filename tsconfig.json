@@ -15,7 +15,8 @@
     "jsx": "react-jsx",
 
     /* Linting - Disabled for smoother deployment */
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true

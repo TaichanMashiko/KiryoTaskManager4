@@ -119,7 +119,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
           const childrenIds = adjacency.get(t.id) || [];
           // Sort children by start date too
           const children = childrenIds
-            .map(id => taskMap.get(id)!)
+            .map((id: string) => taskMap.get(id)!) // Explicitly type ID
             .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
             
           children.forEach(child => visit(child));
@@ -427,4 +427,4 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
       </div>
     </div>
   );
-};
+}
