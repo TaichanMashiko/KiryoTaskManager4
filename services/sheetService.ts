@@ -604,13 +604,13 @@ export class SheetService {
     // Find all rows matching the ID
     const candidates = rows
         .map((row: string[], index: number) => ({ id: row[0], title: row[1], physicalRow: index + 1 }))
-        .filter(item => item.id === taskId);
+        .filter((item: {id: string, title: string}) => item.id === taskId);
 
     if (candidates.length === 0) throw new Error('Task not found in sheet');
 
     // If verification title is provided, try to match it to disambiguate duplicates
     if (verificationTitle && candidates.length > 1) {
-        const titleMatch = candidates.find(c => c.title === verificationTitle);
+        const titleMatch = candidates.find((c: {id: string, title: string}) => c.title === verificationTitle);
         if (titleMatch) {
             rowIndex = titleMatch.physicalRow;
         }

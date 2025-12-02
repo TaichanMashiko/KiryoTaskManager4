@@ -68,7 +68,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
     }
 
     return {
-      dates,
+      dates: dateArray,
       startDate: min
     };
   }, [tasks]);
@@ -253,7 +253,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
               タスク名
             </div>
             <div className="flex">
-              {dates.map((date, i) => {
+              {dates.map((date: Date, i: number) => {
                 const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                 return (
                   <div 
@@ -273,7 +273,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
           <div className="relative">
             {/* Background Grid (Optimized: rendered once) */}
             <div className="absolute inset-0 flex pl-64 pointer-events-none z-0">
-               {dates.map((date, i) => {
+               {dates.map((date: Date, i: number) => {
                   const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                   return (
                     <div 
