@@ -22,7 +22,6 @@ export interface User {
   email: string;
   name: string;
   role: 'admin' | 'user';
-  department?: string; // 部署・所属
   avatarUrl?: string;
 }
 

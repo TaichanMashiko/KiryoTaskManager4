@@ -28,7 +28,6 @@ function App() {
   const [filterAssignee, setFilterAssignee] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterTag, setFilterTag] = useState('ALL');
-  const [filterDepartment, setFilterDepartment] = useState('ALL');
 
   const loadData = useCallback(async () => {
     try {
@@ -319,13 +318,8 @@ function App() {
       const matchesStatus = filterStatus === 'ALL' || task.status === filterStatus;
       const matchesTag = filterTag === 'ALL' || task.tag === filterTag;
 
-      // Department Filter
-      let matchesDepartment = true;
-      if (filterDepartment !== 'ALL') {
-          const assignee = users.find(u => u.email === task.assigneeEmail);
-          matchesDepartment = assignee ? assignee.department === filterDepartment : false;
-      }
-      
+      // Department Filter - REMOVED
+
       // Visibility Filter (Privacy)
       // Hide private tasks (TODOs) of OTHER users
       let isVisible = true;
@@ -335,15 +329,9 @@ function App() {
           }
       }
 
-      return matchesSearch && matchesAssignee && matchesStatus && matchesTag && matchesDepartment && isVisible;
+      return matchesSearch && matchesAssignee && matchesStatus && matchesTag && isVisible;
     });
-  }, [tasks, searchKeyword, filterAssignee, filterStatus, filterTag, filterDepartment, users, currentUser]);
-
-  // Unique departments for filter
-  const departments = useMemo(() => {
-      const depts = new Set(users.map(u => u.department).filter(Boolean));
-      return Array.from(depts);
-  }, [users]);
+  }, [tasks, searchKeyword, filterAssignee, filterStatus, filterTag, currentUser]);
 
   if (!isInitialized) {
     return (
@@ -479,14 +467,7 @@ function App() {
                     {Object.values(Status).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 
-                <select 
-                    value={filterDepartment} 
-                    onChange={(e) => setFilterDepartment(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 outline-none flex-shrink-0 sm:w-auto"
-                >
-                    <option value="ALL">全部署</option>
-                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                {/* Department Filter Removed */}
 
                 <select 
                     value={filterTag} 

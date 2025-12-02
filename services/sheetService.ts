@@ -284,7 +284,7 @@ export class SheetService {
                 spreadsheetId: SPREADSHEET_ID,
                 range: `${SHEET_NAMES.USERS}!A2`,
                 valueInputOption: 'USER_ENTERED',
-                resource: { values: [['0001', this.currentUserEmail, '管理者', 'システム管理', this.currentUserName || 'Admin User']] }
+                resource: { values: [['0001', this.currentUserEmail, '管理者', '', this.currentUserName || 'Admin User']] }
              });
           }
           if (name === SHEET_NAMES.TAGS) {
@@ -323,7 +323,7 @@ export class SheetService {
       range: `${SHEET_NAMES.TASKS}!A:A`, 
     });
     
-    const rows = res.result.values || [];
+    const rows = (res.result.values || []) as string[][];
     // rows[0] is Row 1 (Header), rows[1] is Row 2...
     // The physical row number is index + 1
     const index = rows.findIndex((row: string[]) => row[0] === taskId);
@@ -340,15 +340,15 @@ export class SheetService {
     if (!this.currentUserEmail) return null;
 
     const users = await this.getUsers();
-    let user = users.find(u => u.email.toLowerCase() === this.currentUserEmail.toLowerCase());
+    let user = users.find((u: User) => u.email.toLowerCase() === this.currentUserEmail.toLowerCase());
     
     if (!user) {
       try {
         const newName = this.currentUserName || this.currentUserEmail.split('@')[0];
         const newRole = '一般';
-        const newDept = '';
         const newId = 'user_' + Math.random().toString(36).substr(2, 9);
-        const newRow = [newId, this.currentUserEmail, newRole, newDept, newName];
+        // Department column (index 3) is left empty to maintain column alignment for Name (index 4)
+        const newRow = [newId, this.currentUserEmail, newRole, '', newName];
 
         await window.gapi.client.sheets.spreadsheets.values.append({
           spreadsheetId: SPREADSHEET_ID,
@@ -361,7 +361,6 @@ export class SheetService {
           email: this.currentUserEmail,
           name: newName,
           role: 'user',
-          department: newDept,
           avatarUrl: undefined
         };
       } catch (e) {
@@ -378,12 +377,12 @@ export class SheetService {
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.USERS}!A2:E`,
     });
-    const rows = res.result.values || [];
+    const rows = (res.result.values || []) as string[][];
     return rows.map((row: string[]) => ({
       email: row[1],
       name: row[4] || row[1],
       role: (row[2] === '管理者' ? 'admin' : 'user') as 'admin' | 'user',
-      department: row[3],
+      // Department (row[3]) is ignored as per requirements
     }));
   }
 
@@ -393,7 +392,7 @@ export class SheetService {
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TAGS}!A2:C`,
     });
-    const rows = res.result.values || [];
+    const rows = (res.result.values || []) as string[][];
     return rows.map((row: string[]) => ({
       id: row[0],
       name: row[1],
@@ -423,7 +422,7 @@ export class SheetService {
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TASKS}!A2:O`,
     });
-    const rows = res.result.values || [];
+    const rows = (res.result.values || []) as string[][];
     return rows.map((row: string[]) => ({
       id: row[0],
       title: row[1],

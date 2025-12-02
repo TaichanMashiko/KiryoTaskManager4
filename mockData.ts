@@ -2,9 +2,9 @@
 import { Task, User, Tag, Status, Priority } from './types';
 
 export const MOCK_USERS: User[] = [
-  { email: 'demo@kiryo.com', name: '山田 太郎', role: 'admin', department: '教務部', avatarUrl: 'https://picsum.photos/32/32?random=1' },
-  { email: 'suzuki@kiryo.com', name: '鈴木 花子', role: 'user', department: '進路指導部', avatarUrl: 'https://picsum.photos/32/32?random=2' },
-  { email: 'tanaka@kiryo.com', name: '田中 次郎', role: 'user', department: '第1学年', avatarUrl: 'https://picsum.photos/32/32?random=3' },
+  { email: 'demo@kiryo.com', name: '山田 太郎', role: 'admin', avatarUrl: 'https://picsum.photos/32/32?random=1' },
+  { email: 'suzuki@kiryo.com', name: '鈴木 花子', role: 'user', avatarUrl: 'https://picsum.photos/32/32?random=2' },
+  { email: 'tanaka@kiryo.com', name: '田中 次郎', role: 'user', avatarUrl: 'https://picsum.photos/32/32?random=3' },
 ];
 
 export const MOCK_TAGS: Tag[] = [

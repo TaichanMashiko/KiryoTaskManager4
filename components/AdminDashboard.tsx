@@ -73,7 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ tasks, users }) => {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                        <div className="text-xs text-gray-500">{user.department || '部署未設定'}</div>
+                        {/* Department display removed */}
                       </div>
                     </div>
                   </td>
