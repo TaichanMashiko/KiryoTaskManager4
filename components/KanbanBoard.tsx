@@ -21,17 +21,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
   
   // Display Options
   const [isCompact, setIsCompact] = useState(false);
-  const [collapsedColumns, setCollapsedColumns] = useState<Set<Status>>(new Set());
-
-  const toggleColumn = (status: Status) => {
-      const newSet = new Set(collapsedColumns);
-      if (newSet.has(status)) {
-          newSet.delete(status);
-      } else {
-          newSet.add(status);
-      }
-      setCollapsedColumns(newSet);
-  };
 
   const getUserName = (email: string) => {
     const user = users.find(u => u.email === email);
@@ -183,34 +172,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             // Sort tasks by order before rendering
             const statusTasks = tasks.filter(t => t.status === status).sort((a, b) => (a.order || 0) - (b.order || 0));
             const styles = getHeaderStyles(status);
-            const isCollapsed = collapsedColumns.has(status);
             
-            // Collapsed View
-            if (isCollapsed) {
-                return (
-                    <div 
-                        key={status}
-                        className={`flex-none w-10 rounded-lg flex flex-col items-center cursor-pointer transition-all border pt-4 hover:brightness-95 ${styles.container}`}
-                        onClick={() => toggleColumn(status)}
-                        title={`${status} (クリックで展開)`}
-                    >
-                         <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
-                            <span 
-                                className="text-sm font-bold tracking-widest whitespace-nowrap select-none"
-                                style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}
-                            >
-                                {status}
-                            </span>
-                         </div>
-                         <div className={`mb-3 mt-2 text-xs w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${styles.badge}`}>
-                            {statusTasks.length}
-                         </div>
-                    </div>
-                );
-            }
-
-            // Expanded View
-            // 'w-full' removed to ensure flex-grow distributes space correctly without forcing large overflow
             return (
             <div
                 key={status}
@@ -225,13 +187,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                         {statusTasks.length}
                     </span>
                 </div>
-                <button 
-                    onClick={() => toggleColumn(status)}
-                    className="text-white hover:bg-white/20 rounded p-1 focus:outline-none"
-                    title="折りたたむ"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                </button>
                 </div>
                 
                 <div className="p-2 flex-1 overflow-y-auto space-y-2 scrollbar-hide">
