@@ -93,7 +93,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
   // Drop on Column (Append to end)
   const onColumnDrop = (e: DragEvent<HTMLDivElement>, status: Status, statusTasksCount: number) => {
     e.preventDefault();
-    const taskId = e.dataTransfer.getData('taskId');
+    const taskId = draggedTaskId || e.dataTransfer.getData('taskId');
     if (!taskId) return;
     
     onDragEnd(); // Clear UI state immediately
@@ -110,7 +110,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
       e.preventDefault();
       e.stopPropagation(); // Stop bubbling to column drop!
       
-      const draggedId = e.dataTransfer.getData('taskId');
+      const draggedId = draggedTaskId || e.dataTransfer.getData('taskId');
       if (!draggedId || draggedId === targetTask.id) return;
 
       onDragEnd(); // Clear UI state immediately
@@ -142,7 +142,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
     e.preventDefault();
     e.stopPropagation(); // Stop propagation
     
-    const taskId = e.dataTransfer.getData('taskId');
+    // Prefer using state variable for reliability
+    const taskId = draggedTaskId || e.dataTransfer.getData('taskId');
     
     // 1. Reset Drag State Immediately
     onDragEnd();

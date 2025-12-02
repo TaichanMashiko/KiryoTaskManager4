@@ -311,21 +311,25 @@ export class SheetService {
   }
 
   // --- Helper to find correct row by ID ---
-  // Tasks are sorted client-side, so array index != sheet row index.
-  // We must search the sheet's ID column to find the actual row number.
+  // We search the entire A column (including header) to get the correct row index.
+  // The row number is 1-based.
   private async getRowIndex(taskId: string): Promise<number> {
+    if (!taskId) return -1;
     await this.ensureAuth();
+    
+    // Fetch the entire column A to ensure we get absolute row positions
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A2:A`, // Only need IDs
+      range: `${SHEET_NAMES.TASKS}!A:A`, 
     });
+    
     const rows = res.result.values || [];
-    // rows array corresponds to A2, A3, ...
+    // rows[0] is Row 1 (Header), rows[1] is Row 2...
+    // The physical row number is index + 1
     const index = rows.findIndex((row: string[]) => row[0] === taskId);
     
     if (index === -1) return -1;
-    // index 0 is Row 2. So return index + 2.
-    return index + 2;
+    return index + 1; // Return 1-based row number
   }
 
   // --- Data Access Methods ---
@@ -512,7 +516,6 @@ export class SheetService {
 
   async updateTask(task: Task): Promise<Task> {
     await this.ensureAuth();
-    // Do not use getTasks() here as it returns sorted array which mismatches row indices
     const rowIndex = await this.getRowIndex(task.id);
     if (rowIndex === -1) throw new Error('Task not found');
 
@@ -559,15 +562,15 @@ export class SheetService {
   async updateTaskOrders(updatedTasks: Task[]): Promise<void> {
     await this.ensureAuth();
     
-    // Optimized: Fetch all IDs once to determine row indices efficiently
+    // Fetch all IDs from A:A for correct mapping
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${SHEET_NAMES.TASKS}!A2:A`,
+      range: `${SHEET_NAMES.TASKS}!A:A`,
     });
     const rows = res.result.values || [];
     const idToRowMap = new Map<string, number>();
     rows.forEach((row: string[], i: number) => {
-        if (row[0]) idToRowMap.set(row[0], i + 2);
+        if (row[0]) idToRowMap.set(row[0], i + 1); // 1-based index
     });
     
     const updatePromises = updatedTasks.map(t => {
@@ -588,9 +591,22 @@ export class SheetService {
   async deleteTask(taskId: string): Promise<void> {
     await this.ensureAuth();
     
-    // Use getRowIndex to identify the correct physical row
+    // 1. Identify the row index
     const rowIndex = await this.getRowIndex(taskId);
     if (rowIndex === -1) throw new Error('Task not found');
+
+    // 2. Safety Check: Verify the ID at the target row matches the requested ID.
+    // This is crucial to prevent deleting the wrong row (e.g., top row) if data shifted.
+    const checkRes = await window.gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${SHEET_NAMES.TASKS}!A${rowIndex}`,
+    });
+    const checkId = checkRes.result.values?.[0]?.[0];
+    
+    if (checkId !== taskId) {
+        console.error(`Row mismatch during delete. Expected ${taskId} at row ${rowIndex}, but found ${checkId}`);
+        throw new Error("Target task row has moved. Please try again.");
+    }
 
     // Retrieve task details for calendar event deletion if needed
     // using getTasks for data lookup is fine, just not for index
@@ -607,9 +623,9 @@ export class SheetService {
 
     const sheetId = await this.getSheetId(SHEET_NAMES.TASKS);
     
-    // Calculate 0-based index for deleteDimension
-    // rowIndex is 1-based (Sheet Row). Row 1 (Header) is index 0.
-    // So Row 2 is index 1.
+    // 3. Calculate 0-based index for deleteDimension
+    // rowIndex is 1-based (Physical Sheet Row).
+    // Row 1 (Header) is index 0. Row N is index N-1.
     const startIndex = rowIndex - 1;
 
     await window.gapi.client.sheets.spreadsheets.batchUpdate({
