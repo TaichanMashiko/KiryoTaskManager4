@@ -57,21 +57,31 @@ function App() {
     }
   }, [filterAssignee, isInitialized]);
 
+  // Initialization Effect
   useEffect(() => {
     const init = async () => {
+      // Prevent double init
+      if (isInitialized) return;
+
       try {
         await sheetService.initClient((signedIn) => {
           setIsSignedIn(signedIn);
           if (signedIn) {
-             loadData().then(() => setIsInitialized(true));
-          } else {
-             setIsInitialized(true);
-             // Attempt silent login if token exists in storage
-             if (sheetService.hasStoredAuth()) {
-                 sheetService.signIn(true);
-             }
+             loadData().finally(() => setIsInitialized(true));
           }
         });
+
+        // Libraries loaded. Check if we can auto-login.
+        if (sheetService.hasStoredAuth()) {
+            // Attempt silent login
+            sheetService.signIn(true);
+            // Show UI immediately (Login screen might flash briefly if silent login succeeds, which is fine)
+            setIsInitialized(true); 
+        } else {
+            // Not signed in, show Login screen
+            setIsInitialized(true);
+        }
+
       } catch (e: any) {
         console.error("Init Error:", e);
         let msg = "初期化に失敗しました。";
@@ -83,7 +93,6 @@ function App() {
             msg += " APIの設定やネットワーク接続を確認してください。";
         }
         
-        // Specific hints for common errors
         if (msg.includes("Calendar API")) {
              msg = "Google Calendar API が有効になっていません。Google Cloud Consoleで有効化してください。";
         }
@@ -91,17 +100,21 @@ function App() {
         setIsInitialized(true);
       }
     };
+    
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once
 
-    // Polling for updates every 30 seconds
+  // Polling Effect
+  useEffect(() => {
+    if (!isSignedIn) return;
+
     const intervalId = setInterval(() => {
-        if (isSignedIn) {
-            loadData();
-        }
+        loadData().catch(e => console.error("Polling failed", e));
     }, 30000);
 
     return () => clearInterval(intervalId);
-  }, [loadData, isSignedIn]);
+  }, [isSignedIn, loadData]);
 
   const handleLogin = () => {
     sheetService.signIn();
