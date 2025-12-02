@@ -191,11 +191,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 return (
                     <div 
                         key={status}
-                        className={`flex-shrink-0 w-12 rounded-lg flex flex-col items-center cursor-pointer transition-all border ${styles.container}`}
+                        className={`flex-none w-12 rounded-lg flex flex-col items-center cursor-pointer transition-all border ${styles.container}`}
                         onClick={() => toggleColumn(status)}
                         title={`${status} (クリックで展開)`}
                     >
-                         <div className="py-4 writing-vertical-rl font-bold tracking-wider transform rotate-180 text-sm">
+                         {/* Removed rotate-180 to make it natural top-to-bottom reading */}
+                         <div className="py-4 writing-vertical-rl font-bold tracking-wider text-sm select-none">
                             {status}
                          </div>
                          <div className={`mt-2 text-xs w-6 h-6 rounded-full flex items-center justify-center ${styles.badge}`}>
@@ -206,10 +207,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             }
 
             // Expanded View
+            // Changed from fixed width (w-80) to flexible width (flex-1) with min-width
             return (
             <div
                 key={status}
-                className="flex-shrink-0 w-80 bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)]"
+                className="flex-1 min-w-[320px] bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)] transition-all duration-300 ease-in-out"
                 onDragOver={onDragOver}
                 onDrop={(e) => onColumnDrop(e, status, statusTasks.length)}
             >
