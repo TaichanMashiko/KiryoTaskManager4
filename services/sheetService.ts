@@ -592,7 +592,6 @@ export class SheetService {
     await this.ensureAuth();
     
     // 1. Fetch ID and Title columns (A:B) to robustly identify the row.
-    // This is critical to prevent duplicate IDs or moved rows causing the wrong row (e.g. top row) to be deleted.
     const res = await window.gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TASKS}!A:B`, // A: ID, B: Title
@@ -604,13 +603,13 @@ export class SheetService {
     // Find all rows matching the ID
     const candidates = rows
         .map((row: string[], index: number) => ({ id: row[0], title: row[1], physicalRow: index + 1 }))
-        .filter((item: {id: string, title: string}) => item.id === taskId);
+        .filter((item: {id: string, title: string, physicalRow: number}) => item.id === taskId);
 
     if (candidates.length === 0) throw new Error('Task not found in sheet');
 
     // If verification title is provided, try to match it to disambiguate duplicates
     if (verificationTitle && candidates.length > 1) {
-        const titleMatch = candidates.find((c: {id: string, title: string}) => c.title === verificationTitle);
+        const titleMatch = candidates.find((c: {id: string, title: string, physicalRow: number}) => c.title === verificationTitle);
         if (titleMatch) {
             rowIndex = titleMatch.physicalRow;
         }
@@ -625,7 +624,6 @@ export class SheetService {
     if (rowIndex === -1) throw new Error('Task not found');
 
     // Retrieve task details for calendar event deletion if needed
-    // using getTasks for data lookup is fine, just not for index
     const tasks = await this.getTasks();
     const task = tasks.find(t => t.id === taskId);
 
@@ -640,8 +638,6 @@ export class SheetService {
     const sheetId = await this.getSheetId(SHEET_NAMES.TASKS);
     
     // 3. Calculate 0-based index for deleteDimension
-    // rowIndex is 1-based (Physical Sheet Row).
-    // Row 1 (Header) is index 0. Row N is index N-1.
     const startIndex = rowIndex - 1;
 
     await window.gapi.client.sheets.spreadsheets.batchUpdate({

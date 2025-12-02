@@ -186,7 +186,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 key={status}
                 className={`transition-all duration-300 ease-in-out rounded-lg flex flex-col max-h-[calc(100vh-220px)]
                     ${isCollapsed 
-                        ? 'w-10 min-w-[2.5rem] bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100 items-center py-4 flex-none' 
+                        ? 'w-12 min-w-[3rem] bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100 items-center py-4 flex-none' 
                         : 'flex-1 min-w-[260px] bg-gray-100'
                     }
                 `}

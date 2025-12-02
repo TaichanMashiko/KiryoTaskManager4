@@ -19,6 +19,11 @@ interface DragState {
   originalEnd: Date;
 }
 
+interface GanttDateRange {
+    dates: Date[];
+    startDate: Date;
+}
+
 export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEdit, onTaskUpdate, onDelete }) => {
   const colWidth = 40; // Width of one day column in pixels
   const headerHeight = 48;
@@ -29,7 +34,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
   const [dragOffset, setDragOffset] = useState(0);
 
   // Calculate timeline range based on tasks
-  const { dates, startDate } = useMemo(() => {
+  const { dates, startDate } = useMemo<GanttDateRange>(() => {
     if (tasks.length === 0) {
       const now = new Date();
       return { dates: [now], startDate: now };
@@ -75,7 +80,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
 
   // 1. Filter valid tasks (must have dates)
   // 2. Sort tasks topologically so connected tasks are adjacent
-  // Note: If user wants to sort by tag, we could adjust this, but dependency sorting is critical for Gantt flow.
   const sortedValidTasks = useMemo(() => {
       const validTasks = tasks.filter(t => t.startDate && t.dueDate);
       
@@ -304,7 +308,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
                     const endX = currentCoords.x;
                     const endY = currentCoords.y;
 
-                    // Ensure lines go forward properly even if task is back in time visually (though logically redundant)
                     const path = `M ${startX} ${startY} C ${startX + 20} ${startY}, ${endX - 20} ${endY}, ${endX} ${endY}`;
 
                     return (
@@ -388,7 +391,6 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
                         cursor: 'move',
                         backgroundColor: barColor,
                         opacity: barOpacity,
-                        // Add striped pattern for NOT_STARTED if desired (using CSS gradient)
                         backgroundImage: isNotStarted ? 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)' : 'none',
                         backgroundSize: '1rem 1rem'
                       }}
