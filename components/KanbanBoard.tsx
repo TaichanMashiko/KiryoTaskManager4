@@ -157,18 +157,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
     }
   };
 
-  const renderVerticalText = (text: string) => {
-      return (
-          <div className="flex flex-col items-center space-y-1 py-4 select-none">
-              {text.split('').map((char, index) => (
-                  <span key={index} className="text-sm font-bold tracking-widest leading-none">
-                      {char}
-                  </span>
-              ))}
-          </div>
-      );
-  };
-
   return (
     <div className="h-full flex flex-col">
         {/* Controls Toolbar */}
@@ -202,15 +190,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 return (
                     <div 
                         key={status}
-                        className={`flex-none w-10 rounded-lg flex flex-col items-center cursor-pointer transition-all border pt-2 hover:brightness-95 ${styles.container}`}
+                        className={`flex-none w-10 rounded-lg flex flex-col items-center cursor-pointer transition-all border pt-4 hover:brightness-95 ${styles.container}`}
                         onClick={() => toggleColumn(status)}
                         title={`${status} (クリックで展開)`}
                     >
-                         {/* Render text characters manually to avoid rotation/orientation issues */}
-                         <div className="flex-1 flex items-center justify-center">
-                            {renderVerticalText(status)}
+                         <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
+                            <span 
+                                className="text-sm font-bold tracking-widest whitespace-nowrap select-none"
+                                style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}
+                            >
+                                {status}
+                            </span>
                          </div>
-                         <div className={`mb-3 text-xs w-6 h-6 rounded-full flex items-center justify-center ${styles.badge}`}>
+                         <div className={`mb-3 mt-2 text-xs w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${styles.badge}`}>
                             {statusTasks.length}
                          </div>
                     </div>
@@ -218,11 +210,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             }
 
             // Expanded View
-            // Added 'w-full' to force flex items to try to take up max space, ensuring they expand when others collapse
+            // 'w-full' removed to ensure flex-grow distributes space correctly without forcing large overflow
             return (
             <div
                 key={status}
-                className="flex-1 w-full min-w-[300px] bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)] transition-all duration-300 ease-in-out"
+                className="flex-1 min-w-[300px] bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)] transition-all duration-300 ease-in-out"
                 onDragOver={onDragOver}
                 onDrop={(e) => onColumnDrop(e, status, statusTasks.length)}
             >
