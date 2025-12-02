@@ -34,7 +34,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
   const [dragOffset, setDragOffset] = useState(0);
 
   // Calculate timeline range based on tasks
-  const { dates, startDate } = useMemo<GanttDateRange>(() => {
+  // Explicitly return GanttDateRange to avoid implicit Any or circular reference issues in build
+  const timelineData = useMemo<GanttDateRange>((): GanttDateRange => {
     if (tasks.length === 0) {
       const now = new Date();
       return { dates: [now], startDate: now };
@@ -65,7 +66,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
     max = new Date(max);
     max.setDate(max.getDate() + 14);
 
-    const dateArray = [];
+    const dateArray: Date[] = [];
     const curr = new Date(min);
     while (curr <= max) {
       dateArray.push(new Date(curr));
@@ -77,6 +78,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
       startDate: min
     };
   }, [tasks]);
+
+  const { dates, startDate } = timelineData;
 
   // 1. Filter valid tasks (must have dates)
   // 2. Sort tasks topologically so connected tasks are adjacent
@@ -376,81 +379,51 @@ export const GanttChart: React.FC<GanttChartProps> = ({ tasks, users, tags, onEd
                       )}
                       {task.title}
                     </div>
-                    <div className="flex-shrink-0 w-6 h-6 bg-indigo-50 rounded-full flex items-center justify-center text-xs text-indigo-600 font-bold">
-                      {getUserInitial(task.assigneeEmail)}
+
+                    <div className="flex-shrink-0 flex items-center">
+                         <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-bold flex items-center justify-center border border-indigo-200 mr-1">
+                             {getUserInitial(task.assigneeEmail)}
+                         </div>
                     </div>
                   </div>
 
-                  {/* Timeline Area for this row */}
-                  <div className="relative flex-1">
-                    <div
-                      className="absolute top-2 h-8 rounded-md shadow-sm flex items-center px-2 text-xs text-white whitespace-nowrap overflow-hidden transition-all"
-                      style={{ 
-                        left: `${left}px`, 
-                        width: `${width}px`,
-                        cursor: 'move',
-                        backgroundColor: barColor,
-                        opacity: barOpacity,
-                        backgroundImage: isNotStarted ? 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)' : 'none',
-                        backgroundSize: '1rem 1rem'
-                      }}
-                      onMouseDown={(e) => handleMouseDown(e, task.id, 'move', task)}
-                      title={`タグ: ${task.tag}, ステータス: ${task.status}`}
-                    >
-                       {/* Drag Handle Left */}
-                       <div 
-                           className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-black/20 z-20"
-                           onMouseDown={(e) => handleMouseDown(e, task.id, 'left', task)}
-                       />
-                       
-                       {/* Content Area: Icons for Status */}
-                       <div className="flex-1 h-full flex items-center overflow-hidden pl-2 pointer-events-none relative z-10">
-                           {isCompleted && (
-                               <svg className="w-4 h-4 mr-1 text-white/90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                           )}
-                           {isNotStarted && (
-                               <svg className="w-3 h-3 mr-1 text-white/80 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                           )}
-                           <span className="truncate font-medium drop-shadow-md">{task.title}</span>
-                       </div>
+                  {/* Bar Area */}
+                  <div className="flex-1 relative">
+                      {/* Bar */}
+                      <div 
+                        className={`absolute top-2 h-8 rounded-md shadow-sm border border-white/20 flex items-center px-2 text-xs text-white overflow-hidden whitespace-nowrap cursor-pointer hover:brightness-95 transition-all
+                            ${isCompleted ? 'bg-green-500' : isNotStarted ? 'bg-gray-400' : 'bg-indigo-500'}
+                        `}
+                        style={{ 
+                            left: left, 
+                            width: width,
+                            backgroundColor: barColor, // Override with tag color if exists
+                            opacity: barOpacity,
+                            cursor: 'grab'
+                        }}
+                        onMouseDown={(e) => handleMouseDown(e, task.id, 'move', task)}
+                        onClick={() => onEdit(task)}
+                      >
+                         {/* Left Resize Handle */}
+                         <div 
+                            className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize hover:bg-black/10 z-10"
+                            onMouseDown={(e) => handleMouseDown(e, task.id, 'left', task)}
+                         />
 
-                       {/* Drag Handle Right */}
-                       <div 
-                           className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-black/20 z-20"
-                           onMouseDown={(e) => handleMouseDown(e, task.id, 'right', task)}
-                       />
-                    </div>
+                         <span className="font-medium drop-shadow-md truncate w-full pl-1">{task.title}</span>
+
+                         {/* Right Resize Handle */}
+                         <div 
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-e-resize hover:bg-black/10 z-10"
+                            onMouseDown={(e) => handleMouseDown(e, task.id, 'right', task)}
+                         />
+                      </div>
                   </div>
                 </div>
               );
             })}
-
-            {tasks.length === 0 && (
-               <div className="p-8 text-center text-gray-500 italic">
-                 表示するタスクがありません
-               </div>
-            )}
           </div>
         </div>
-      </div>
-      
-      {/* Legend */}
-      <div className="bg-gray-50 p-2 border-t border-gray-200 flex items-center gap-4 text-xs text-gray-600 overflow-x-auto">
-          <div className="font-bold">凡例:</div>
-          <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1"><svg className="w-4 h-4 bg-gray-400 rounded text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg> 完了</div>
-              <div className="flex items-center gap-1"><div className="w-4 h-4 bg-gray-400 rounded"></div> 進行中</div>
-              <div className="flex items-center gap-1"><div className="w-4 h-4 bg-gray-400/60 rounded flex items-center justify-center text-white"><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div> 未着手</div>
-          </div>
-          <div className="h-4 border-l border-gray-300 mx-2"></div>
-          <div className="flex items-center gap-2">
-              {tags.map(tag => (
-                  <div key={tag.id} className="flex items-center gap-1">
-                      <div className="w-3 h-3 rounded-full" style={{backgroundColor: tag.color}}></div>
-                      {tag.name}
-                  </div>
-              ))}
-          </div>
       </div>
     </div>
   );

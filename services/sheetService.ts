@@ -596,20 +596,27 @@ export class SheetService {
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAMES.TASKS}!A:B`, // A: ID, B: Title
     });
-    const rows = res.result.values || [];
+    // Explicitly cast the rows to string[][] to avoid implicit 'any' error during build
+    const rows = (res.result.values as string[][]) || [];
     
     let rowIndex = -1;
 
+    interface CandidateRow {
+        id: string;
+        title: string;
+        physicalRow: number;
+    }
+
     // Find all rows matching the ID
-    const candidates = rows
+    const candidates: CandidateRow[] = rows
         .map((row: string[], index: number) => ({ id: row[0], title: row[1], physicalRow: index + 1 }))
-        .filter((item: {id: string, title: string, physicalRow: number}) => item.id === taskId);
+        .filter((item: CandidateRow) => item.id === taskId);
 
     if (candidates.length === 0) throw new Error('Task not found in sheet');
 
     // If verification title is provided, try to match it to disambiguate duplicates
     if (verificationTitle && candidates.length > 1) {
-        const titleMatch = candidates.find((c: {id: string, title: string, physicalRow: number}) => c.title === verificationTitle);
+        const titleMatch = candidates.find((c: CandidateRow) => c.title === verificationTitle);
         if (titleMatch) {
             rowIndex = titleMatch.physicalRow;
         }
