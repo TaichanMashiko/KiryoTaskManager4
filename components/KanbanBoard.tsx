@@ -186,8 +186,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                 key={status}
                 className={`transition-all duration-300 ease-in-out rounded-lg flex flex-col max-h-[calc(100vh-220px)]
                     ${isCollapsed 
-                        ? 'w-14 min-w-[3.5rem] bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100 items-center py-4' 
-                        : 'flex-1 min-w-[300px] bg-gray-100'
+                        ? 'w-12 min-w-[3rem] bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100 items-center py-4 flex-none' 
+                        : 'flex-1 min-w-[260px] bg-gray-100'
                     }
                 `}
                 onDragOver={onDragOver}
@@ -197,7 +197,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             >
                 {isCollapsed ? (
                     // Collapsed View
-                    <div className="flex flex-col items-center h-full">
+                    <div className="flex flex-col items-center h-full w-full">
                          <button 
                             onClick={(e) => { e.stopPropagation(); toggleStatus(status); }}
                             className="mb-4 text-gray-400 hover:text-indigo-600 transition-colors p-1"
@@ -205,11 +205,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
                         </button>
-                        <div 
-                            className="text-lg font-bold text-gray-500 tracking-widest whitespace-nowrap flex-1 flex items-center justify-center"
-                            style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}
-                        >
-                            {status}
+                        <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
+                            <span 
+                                className="text-lg font-bold text-gray-500 tracking-widest whitespace-nowrap select-none"
+                                style={{ writingMode: 'vertical-rl', textOrientation: 'upright' }}
+                            >
+                                {status}
+                            </span>
                         </div>
                         <div className={`mt-4 text-xs font-bold px-2 py-1 rounded-full border border-gray-200 bg-white text-gray-600`}>
                             {statusTasks.length}
