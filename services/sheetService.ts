@@ -310,6 +310,24 @@ export class SheetService {
     }
   }
 
+  // --- Helper to find correct row by ID ---
+  // Tasks are sorted client-side, so array index != sheet row index.
+  // We must search the sheet's ID column to find the actual row number.
+  private async getRowIndex(taskId: string): Promise<number> {
+    await this.ensureAuth();
+    const res = await window.gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAMES.TASKS}!A2:A`, // Only need IDs
+    });
+    const rows = res.result.values || [];
+    // rows array corresponds to A2, A3, ...
+    const index = rows.findIndex((row: string[]) => row[0] === taskId);
+    
+    if (index === -1) return -1;
+    // index 0 is Row 2. So return index + 2.
+    return index + 2;
+  }
+
   // --- Data Access Methods ---
 
   async getCurrentUser(): Promise<User | null> {
@@ -494,11 +512,10 @@ export class SheetService {
 
   async updateTask(task: Task): Promise<Task> {
     await this.ensureAuth();
-    const tasks = await this.getTasks();
-    const index = tasks.findIndex(t => t.id === task.id);
-    if (index === -1) throw new Error('Task not found');
+    // Do not use getTasks() here as it returns sorted array which mismatches row indices
+    const rowIndex = await this.getRowIndex(task.id);
+    if (rowIndex === -1) throw new Error('Task not found');
 
-    const rowIndex = index + 2;
     const now = new Date().toISOString();
     const updatedTask = { ...task, updatedAt: now };
 
@@ -533,54 +550,30 @@ export class SheetService {
   async updateTaskStatus(taskId: string, status: Status): Promise<void> {
     await this.ensureAuth(); 
     const tasks = await this.getTasks();
-    const index = tasks.findIndex(t => t.id === taskId);
-    if (index === -1) throw new Error('Task not found');
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) throw new Error('Task not found');
     
-    const task = tasks[index];
     await this.updateTask({ ...task, status });
   }
 
   async updateTaskOrders(updatedTasks: Task[]): Promise<void> {
     await this.ensureAuth();
-    const allTasks = await this.getTasks();
     
-    // Create a map of updates for efficient lookup
-    const updatesMap = new Map(updatedTasks.map(t => [t.id, t.order]));
-    
-    // We need to write back all rows to ensure consistency or optimize by updating only changed rows.
-    // For simplicity and correctness with the existing API structure, we loop through updates.
-    // Optimization: Batch update could be used, but since rows are scattered, we'd need multiple ranges.
-    // Given the constraints, we will iterate. For a production app, batchUpdate with multiple ranges is better.
-    
-    // Let's optimize slightly: group by contiguous rows? No, order might change indices.
-    // We will just call updateTask for each changed task. 
-    // Since this might be slow, we can use a raw value update if we know row indices.
-    
-    const requests = [];
-    for (const updateTask of updatedTasks) {
-        const index = allTasks.findIndex(t => t.id === updateTask.id);
-        if (index !== -1) {
-            const rowIndex = index + 2;
-            // Only update the Order column (O, index 14)
-            // But valueInputOption is needed. 'values.update' only takes one range.
-            // 'batchUpdate' values is better.
-            
-            // Actually, let's just use the existing updateTask which is safe but maybe slow.
-            // To make it faster, let's construct a batchUpdate for values.
-        }
-    }
-    
-    // Better approach: Re-upload the whole table? No, too risky.
-    // Let's just sequential update for now or implement batch value update.
-    
-    // NOTE: For this demo scope, let's use a Promise.all with individual updates.
-    // But we only want to update the 'Order' column (Column O).
-    // range: `O${rowIndex}`
+    // Optimized: Fetch all IDs once to determine row indices efficiently
+    const res = await window.gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAMES.TASKS}!A2:A`,
+    });
+    const rows = res.result.values || [];
+    const idToRowMap = new Map<string, number>();
+    rows.forEach((row: string[], i: number) => {
+        if (row[0]) idToRowMap.set(row[0], i + 2);
+    });
     
     const updatePromises = updatedTasks.map(t => {
-        const index = allTasks.findIndex(at => at.id === t.id);
-        if (index === -1) return Promise.resolve();
-        const rowIndex = index + 2;
+        const rowIndex = idToRowMap.get(t.id);
+        if (!rowIndex) return Promise.resolve();
+        
         return window.gapi.client.sheets.spreadsheets.values.update({
              spreadsheetId: SPREADSHEET_ID,
              range: `${SHEET_NAMES.TASKS}!O${rowIndex}`,
@@ -594,13 +587,17 @@ export class SheetService {
 
   async deleteTask(taskId: string): Promise<void> {
     await this.ensureAuth();
+    
+    // Use getRowIndex to identify the correct physical row
+    const rowIndex = await this.getRowIndex(taskId);
+    if (rowIndex === -1) throw new Error('Task not found');
+
+    // Retrieve task details for calendar event deletion if needed
+    // using getTasks for data lookup is fine, just not for index
     const tasks = await this.getTasks();
-    const index = tasks.findIndex(t => t.id === taskId);
-    if (index === -1) throw new Error('Task not found');
+    const task = tasks.find(t => t.id === taskId);
 
-    const task = tasks[index];
-
-    if (task.calendarEventId) {
+    if (task && task.calendarEventId) {
         try {
             await this.removeFromCalendar(task.calendarEventId);
         } catch (e) {
@@ -610,6 +607,11 @@ export class SheetService {
 
     const sheetId = await this.getSheetId(SHEET_NAMES.TASKS);
     
+    // Calculate 0-based index for deleteDimension
+    // rowIndex is 1-based (Sheet Row). Row 1 (Header) is index 0.
+    // So Row 2 is index 1.
+    const startIndex = rowIndex - 1;
+
     await window.gapi.client.sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       resource: {
@@ -618,8 +620,8 @@ export class SheetService {
             range: {
               sheetId: sheetId,
               dimension: 'ROWS',
-              startIndex: index + 1,
-              endIndex: index + 2
+              startIndex: startIndex,
+              endIndex: startIndex + 1
             }
           }
         }]
