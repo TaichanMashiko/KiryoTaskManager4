@@ -385,7 +385,7 @@ function App() {
       <header className="bg-white shadow-sm z-10 sticky top-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center">
-            <h1 className="text-xl font-bold text-indigo-600 mr-8">Kiryo Tasks <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-1 font-normal">Alpha 1.9</span></h1>
+            <h1 className="text-xl font-bold text-indigo-600 mr-8">KiryoTaskManager</h1>
             
             <div className="hidden md:flex space-x-1">
               <button 

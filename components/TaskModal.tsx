@@ -68,6 +68,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
         setFormData({ ...task });
       } else {
         // Defaults for new task/todo
+        const today = new Date().toISOString().split('T')[0];
         setFormData({
           title: '',
           detail: '',
@@ -75,8 +76,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, t
           tag: '', // デフォルトは空欄
           priority: Priority.MEDIUM,
           status: Status.NOT_STARTED,
-          startDate: new Date().toISOString().split('T')[0],
-          dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+          startDate: today,
+          dueDate: today, // デフォルトで開始日と同日に設定
           visibility: mode === 'todo' ? 'private' : 'public',
           predecessorTaskId: '',
         });
