@@ -74,7 +74,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
   };
 
   const onDragStart = (e: DragEvent<HTMLDivElement>, taskId: string) => {
-    e.dataTransfer.setData('taskId', taskId);
+    e.dataTransfer.setData('text/plain', taskId); // Use standard format
+    e.dataTransfer.setData('taskId', taskId); // Keep for legacy/internal
     e.dataTransfer.effectAllowed = 'move';
     setIsDragging(true);
     setDraggedTaskId(taskId);
@@ -93,7 +94,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
   // Drop on Column (Append to end)
   const onColumnDrop = (e: DragEvent<HTMLDivElement>, status: Status, statusTasksCount: number) => {
     e.preventDefault();
-    const taskId = draggedTaskId || e.dataTransfer.getData('taskId');
+    const taskId = draggedTaskId || e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('taskId');
     if (!taskId) return;
     
     onDragEnd(); // Clear UI state immediately
@@ -110,7 +111,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
       e.preventDefault();
       e.stopPropagation(); // Stop bubbling to column drop!
       
-      const draggedId = draggedTaskId || e.dataTransfer.getData('taskId');
+      const draggedId = draggedTaskId || e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('taskId');
       if (!draggedId || draggedId === targetTask.id) return;
 
       onDragEnd(); // Clear UI state immediately
@@ -142,15 +143,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
     e.preventDefault();
     e.stopPropagation(); // Stop propagation
     
-    // Prefer using state variable for reliability
-    const taskId = draggedTaskId || e.dataTransfer.getData('taskId');
+    // Prioritize standard text/plain, then state, then legacy custom type
+    const taskId = draggedTaskId || e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('taskId');
     
     // 1. Reset Drag State Immediately
     onDragEnd();
 
     // 2. Use setTimeout to defer the delete confirmation.
-    // This allows the drag operation to fully complete and the UI to update (removing the ghost image)
-    // BEFORE the blocking window.confirm dialog appears.
     if (taskId) {
       setTimeout(() => {
           onDelete(taskId);
@@ -195,7 +194,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
                         onClick={() => toggleColumn(status)}
                         title={`${status} (クリックで展開)`}
                     >
-                         {/* Removed rotate-180 to make it natural top-to-bottom reading */}
+                         {/* Corrected text orientation for Japanese vertical writing */}
                          <div className="py-4 writing-vertical-rl font-bold tracking-wider text-sm select-none">
                             {status}
                          </div>
@@ -207,11 +206,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, users, tags, on
             }
 
             // Expanded View
-            // Changed from fixed width (w-80) to flexible width (flex-1) with min-width
+            // Changed from fixed width (w-80) to flexible width (flex-1) with min-width to expand when others hidden
             return (
             <div
                 key={status}
-                className="flex-1 min-w-[320px] bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)] transition-all duration-300 ease-in-out"
+                className="flex-1 min-w-[300px] bg-gray-100 rounded-lg flex flex-col max-h-[calc(100vh-220px)] transition-all duration-300 ease-in-out"
                 onDragOver={onDragOver}
                 onDrop={(e) => onColumnDrop(e, status, statusTasks.length)}
             >

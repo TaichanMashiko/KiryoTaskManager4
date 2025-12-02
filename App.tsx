@@ -183,20 +183,20 @@ function App() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    // 1. 確認ダイアログを出す
-    // カンバンでのドラッグ＆ドロップ直後でも問題ないように、setTimeoutなしで直接呼び出しますが、
-    // KanbanBoard側でドラッグ終了処理を先に行っているので、ここはシンプルでOK。
+    // 1. 確認ダイアログ
     if (!window.confirm('このタスクを削除してもよろしいですか？（Googleカレンダーのイベントも削除されます）')) {
         return;
     }
 
     // 2. Optimistic Update (画面から即座に消す)
     const originalTasks = [...tasks];
+    const taskToDelete = tasks.find(t => t.id === taskId);
     setTasks(prev => prev.filter(t => t.id !== taskId));
 
     // 3. API Call
     try {
-      await sheetService.deleteTask(taskId);
+      // Pass the task title as well to ensure we delete the correct row if IDs are duplicated in the sheet
+      await sheetService.deleteTask(taskId, taskToDelete?.title);
     } catch (e) {
       console.error(e);
       alert('削除に失敗しました。データを復元します。');
@@ -355,7 +355,7 @@ function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">KiryoTaskManager</h1>
+          <h1 className="text-2xl font-bold text-indigo-600 mb-2">Kiryo Tasks</h1>
           <p className="text-gray-500 mb-8">チームのタスクをGoogleスプレッドシートで管理します。</p>
           
           <button

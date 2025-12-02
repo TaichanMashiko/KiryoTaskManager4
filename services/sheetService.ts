@@ -588,25 +588,41 @@ export class SheetService {
     await Promise.all(updatePromises);
   }
 
-  async deleteTask(taskId: string): Promise<void> {
+  async deleteTask(taskId: string, verificationTitle?: string): Promise<void> {
     await this.ensureAuth();
     
-    // 1. Identify the row index
-    const rowIndex = await this.getRowIndex(taskId);
-    if (rowIndex === -1) throw new Error('Task not found');
-
-    // 2. Safety Check: Verify the ID at the target row matches the requested ID.
-    // This is crucial to prevent deleting the wrong row (e.g., top row) if data shifted.
-    const checkRes = await window.gapi.client.sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAMES.TASKS}!A${rowIndex}`,
+    // 1. Fetch ID and Title columns (A:B) to robustly identify the row.
+    // This is critical to prevent duplicate IDs or moved rows causing the wrong row (e.g. top row) to be deleted.
+    const res = await window.gapi.client.sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAMES.TASKS}!A:B`, // A: ID, B: Title
     });
-    const checkId = checkRes.result.values?.[0]?.[0];
+    const rows = res.result.values || [];
     
-    if (checkId !== taskId) {
-        console.error(`Row mismatch during delete. Expected ${taskId} at row ${rowIndex}, but found ${checkId}`);
-        throw new Error("Target task row has moved. Please try again.");
+    let rowIndex = -1;
+
+    // Find all rows matching the ID
+    const candidates = rows
+        .map((row: string[], index: number) => ({ id: row[0], title: row[1], physicalRow: index + 1 }))
+        .filter(item => item.id === taskId);
+
+    if (candidates.length === 0) throw new Error('Task not found in sheet');
+
+    // If verification title is provided, try to match it to disambiguate duplicates
+    if (verificationTitle && candidates.length > 1) {
+        const titleMatch = candidates.find(c => c.title === verificationTitle);
+        if (titleMatch) {
+            rowIndex = titleMatch.physicalRow;
+        }
     }
+
+    // Fallback: If no title match or only 1 candidate, use the first candidate
+    if (rowIndex === -1) {
+        rowIndex = candidates[0].physicalRow;
+    }
+
+    // Safety Check (Redundant now but good for sanity)
+    if (rowIndex === -1) throw new Error('Task not found');
 
     // Retrieve task details for calendar event deletion if needed
     // using getTasks for data lookup is fine, just not for index
